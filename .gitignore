@@ -10,6 +10,9 @@
 
 # production
 /build
+/dist
+/out
+
 
 # misc
 .DS_Store
@@ -18,6 +21,30 @@
 .env.test.local
 .env.production.local
 
+# Logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+*.log
+logs/
+
+# environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.*.local
+
+
+# editor & system files
+.vscode/
+*.code-workspace
+.DS_Store
+Thumbs.db
+
+# Claude-related or AI temp folders
+.claude/
+.claude_code/
+.temp/
+cache/
