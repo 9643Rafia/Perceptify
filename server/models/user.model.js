@@ -5,7 +5,7 @@ const userSchema = new mongoose.Schema({
   fullName: {
     type: String,
     required: [true, "Full name is required"],
-    trim: true,
+    trim: true
   },
   email: {
     type: String,
@@ -13,64 +13,64 @@ const userSchema = new mongoose.Schema({
     unique: true,
     lowercase: true,
     trim: true,
-    match: [/^\S+@\S+\.\S+$/, "Please use a valid email address"],
+    match: [/^\S+@\S+\.\S+$/, "Please use a valid email address"]
   },
   password: {
     type: String,
     required: [true, "Password is required"],
-    minlength: [6, "Password must be at least 6 characters"],
+    minlength: [6, "Password must be at least 6 characters"]
   },
   age: {
     type: Number,
     required: [true, "Age is required"],
     min: [1, "Age must be at least 1"],
-    max: [120, "Age must be less than 120"],
+    max: [120, "Age must be less than 120"]
   },
   role: {
     type: String,
     enum: ["Learner", "Guardian", "Educator"],
-    required: [true, "Role is required"],
+    required: [true, "Role is required"]
   },
   guardianEmail: {
     type: String,
     lowercase: true,
     trim: true,
     match: [/^\S+@\S+\.\S+$/, "Please use a valid email address"],
-    default: null,
+    default: null
   },
   status: {
     type: String,
     enum: ["pending", "active"],
-    default: "active",
+    default: "active"
   },
   learningLevel: {
     type: String,
     enum: ["Beginner", "Intermediate", "Advanced"],
-    default: null,
+    default: null
   },
   assessmentScore: {
     type: Number,
     min: 0,
     max: 100,
-    default: null,
+    default: null
   },
   assessmentCompleted: {
     type: Boolean,
-    default: false,
+    default: false
   },
   assessmentDate: {
     type: Date,
-    default: null,
+    default: null
   },
   createdAt: {
     type: Date,
-    default: Date.now,
+    default: Date.now
   },
   updatedAt: {
     type: Date,
-    default: Date.now,
+    default: Date.now
   },
-})
+}, { timestamps: true });
 
 // Pre-save hook to hash password
 userSchema.pre("save", async function (next) {

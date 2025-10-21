@@ -47,8 +47,15 @@ const LoginForm = () => {
     }
 
     try {
-      await login(formData.email, formData.password)
-      navigate("/dashboard")
+      const data = await login(formData.email, formData.password)
+      // Redirect based on user role
+      if (data.user.role === 'Learner') {
+        navigate("/learning-dashboard")
+      } else if (data.user.role === 'Educator') {
+        navigate("/dashboard") // Educator dashboard
+      } else {
+        navigate("/dashboard") // Default dashboard
+      }
     } catch (error) {
       console.error("Login error:", error)
     }

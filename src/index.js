@@ -9,6 +9,13 @@ import ForEducators from './screens/ForEducators';
 import DeepfakeDetectionDemo from './screens/DeepfakeDemo';
 import Contact from './screens/Contact';
 import InitialAssessmentQuiz from './screens/InitialAssessmentQuiz';
+import LearningDashboard from './screens/LearningDashboard';
+import CourseView from './screens/CourseView';
+import ModuleView from './screens/ModuleView';
+import LessonPlayer from './screens/LessonPlayer';
+import QuizInterface from './screens/QuizInterface';
+import LabInterface from './screens/LabInterface';
+import CertificateView from './screens/CertificateView';
 import './assets/styles/bootstrap.custom.css';
 import './assets/styles/index.css';
 import App from './App';
@@ -16,7 +23,8 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { createBrowserRouter, createRoutesFromElements, Route, RouterProvider } from 'react-router-dom';
 import reportWebVitals from './reportWebVitals';
-import { AuthProvider } from './context/AuthContext'; 
+import { AuthProvider } from './context/AuthContext';
+import ProtectedRoute from './components/ProtectedRoute'; 
 
 // Define your routes
 const router = createBrowserRouter(
@@ -24,17 +32,26 @@ const router = createBrowserRouter(
     <Route path='/' element={<App />}>
       <Route index={true} element={<HomeScreen />} />
       <Route path='signup' element={<SignupForm />} />
-       <Route path='login' element={<LoginForm />} />
-       <Route path='features' element={<Features />} />
-       <Route path='dashboard' element={<Dashboard />} />
-       <Route path='guardian' element={<GuardianApproval />} />
-       <Route path='educators' element={<ForEducators />} />
-       <Route path='demo' element={<DeepfakeDetectionDemo />} />
-       <Route path='contact' element={<Contact />} />
-       <Route path='initialassessment-quiz' element={<InitialAssessmentQuiz />} />
+      <Route path='login' element={<LoginForm />} />
+      <Route path='features' element={<Features />} />
+      <Route path='dashboard' element={<Dashboard />} />
+      <Route path='guardian' element={<GuardianApproval />} />
+      <Route path='educators' element={<ForEducators />} />
+      <Route path='demo' element={<DeepfakeDetectionDemo />} />
+      <Route path='contact' element={<Contact />} />
+      <Route path='initialassessment-quiz' element={<InitialAssessmentQuiz />} />
+
+      {/* Learning Management System Routes */}
+      <Route path='learning-dashboard' element={<ProtectedRoute><LearningDashboard /></ProtectedRoute>} />
+      <Route path='course/:trackId' element={<ProtectedRoute><CourseView /></ProtectedRoute>} />
+      <Route path='module/:moduleId' element={<ProtectedRoute><ModuleView /></ProtectedRoute>} />
+      <Route path='lesson/:lessonId' element={<ProtectedRoute><LessonPlayer /></ProtectedRoute>} />
+      <Route path='quiz/:quizId' element={<ProtectedRoute><QuizInterface /></ProtectedRoute>} />
+      <Route path='lab/:labId' element={<ProtectedRoute><LabInterface /></ProtectedRoute>} />
+      <Route path='certificate/:certId' element={<ProtectedRoute><CertificateView /></ProtectedRoute>} />
     </Route>
   )
-  
+
 );
 
 // Render

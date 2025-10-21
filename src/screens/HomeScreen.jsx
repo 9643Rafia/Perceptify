@@ -1,10 +1,19 @@
 import React, { useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import main from '../assets/main.jpg';
 
 const HomeScreen = () => {
   const { isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+
+  // Redirect authenticated users to learning dashboard
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/learning-dashboard');
+    }
+  }, [isAuthenticated, navigate]);
+
   useEffect(() => {
     // Add animation classes to elements as they scroll into view
     const observerOptions = {

@@ -118,10 +118,10 @@ const SignUpForm = () => {
           : "Registration successful! You will be redirected to the dashboard.",
       })
 
-      // If adult, redirect to dashboard after a delay
+      // If adult, redirect to login page so they can authenticate
       if (!isMinor) {
         setTimeout(() => {
-          navigate("/dashboard")
+          navigate("/login")
         }, 2000)
       }
     } catch (error) {

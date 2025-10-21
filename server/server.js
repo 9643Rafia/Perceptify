@@ -9,6 +9,10 @@ require('dotenv').config();
 const authRoutes = require("./routes/auth.routes")
 const assessmentRoutes = require("./routes/assessment.routes")
 const userRoutes = require("./routes/user.routes")
+const learningRoutes = require("./routes/learning.routes")
+const quizRoutes = require("./routes/quiz.routes")
+const progressRoutes = require("./routes/progress.routes")
+
 
 // Connect to database
 connectDB()
@@ -25,6 +29,10 @@ app.use(morgan("dev"))
 app.use("/api/auth", authRoutes)
 app.use("/api/assessment", assessmentRoutes)
 app.use("/api/users", userRoutes)
+app.use('/api/learning', learningRoutes)
+app.use('/api/quizzes', quizRoutes)
+app.use('/api/progress', progressRoutes)
+
 
 // Error handling middleware
 app.use((err, req, res, next) => {

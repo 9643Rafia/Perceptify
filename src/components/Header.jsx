@@ -1,15 +1,24 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 const Header = () => {
+  const { user, isAuthenticated, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/');
+  };
+
   return (
     <header>
       <nav className="navbar navbar-expand-lg navbar-dark sticky-top">
         <div className="container">
           {/* Logo */}
-          <a className="navbar-brand" href="#home">
+          <Link className="navbar-brand" to={isAuthenticated ? "/learning-dashboard" : "/"}>
             <strong>Perceptify</strong>
-          </a>
+          </Link>
 
           {/* Toggler for mobile */}
           <button
@@ -26,29 +35,89 @@ const Header = () => {
 
           {/* Nav links */}
           <div className="collapse navbar-collapse" id="navbarNav">
-            <ul className="navbar-nav ms-auto mb-2 mb-lg-0">
-              <li className="nav-item">
-                <Link to="/" className="nav-link">Home</Link>
-              </li>
-              <li className="nav-item">
-                <Link to="/features" className="nav-link">Features</Link>
-              </li>
-              <li className="nav-item">
-                <Link to="/demo" className="nav-link">Demo</Link>
-              </li>
-              <li className="nav-item">
-                <Link to="/educators" className="nav-link">For Educators</Link>
-              </li>
-              <li className="nav-item">
-                <Link to="/contact" className="nav-link">Contact</Link>
-              </li>
-            </ul>
+            {isAuthenticated ? (
+              /* Authenticated User Navigation */
+              <>
+                <ul className="navbar-nav ms-auto mb-2 mb-lg-0">
+                  <li className="nav-item">
+                    <Link to="/learning-dashboard" className="nav-link">
+                      My Learning
+                    </Link>
+                  </li>
+                  <li className="nav-item">
+                    <Link to="/demo" className="nav-link">
+                      Demo
+                    </Link>
+                  </li>
+                  <li className="nav-item">
+                    <Link to="/contact" className="nav-link">
+                      Support
+                    </Link>
+                  </li>
+                </ul>
 
-            {/* Auth buttons */}
-            <div className="d-flex ms-3">
-              <Link to="/login" className="btn me-2">Login</Link>
-              <Link to="/signup" className="btn btn-primary">SignUp</Link>
-            </div>
+                {/* User Menu */}
+                <div className="d-flex ms-3 align-items-center">
+                  <div className="dropdown">
+                    <button
+                      className="btn btn-link nav-link dropdown-toggle text-white text-decoration-none"
+                      type="button"
+                      id="userDropdown"
+                      data-bs-toggle="dropdown"
+                      aria-expanded="false"
+                    >
+                      <i className="bi bi-person-circle me-1"></i>
+                      {user?.fullName || user?.email}
+                    </button>
+                    <ul className="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
+                      <li>
+                        <Link className="dropdown-item" to="/learning-dashboard">
+                          <i className="bi bi-speedometer2 me-2"></i>Dashboard
+                        </Link>
+                      </li>
+                      <li>
+                        <Link className="dropdown-item" to="/learning-dashboard">
+                          <i className="bi bi-graph-up me-2"></i>My Progress
+                        </Link>
+                      </li>
+                      <li><hr className="dropdown-divider" /></li>
+                      <li>
+                        <button className="dropdown-item" onClick={handleLogout}>
+                          <i className="bi bi-box-arrow-right me-2"></i>Logout
+                        </button>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </>
+            ) : (
+              /* Guest Navigation */
+              <>
+                <ul className="navbar-nav ms-auto mb-2 mb-lg-0">
+                  <li className="nav-item">
+                    <Link to="/" className="nav-link">Home</Link>
+                  </li>
+                  <li className="nav-item">
+                    <Link to="/features" className="nav-link">Features</Link>
+                  </li>
+                  <li className="nav-item">
+                    <Link to="/demo" className="nav-link">Demo</Link>
+                  </li>
+                  <li className="nav-item">
+                    <Link to="/educators" className="nav-link">For Educators</Link>
+                  </li>
+                  <li className="nav-item">
+                    <Link to="/contact" className="nav-link">Contact</Link>
+                  </li>
+                </ul>
+
+                {/* Auth buttons */}
+                <div className="d-flex ms-3">
+                  <Link to="/login" className="btn me-2">Login</Link>
+                  <Link to="/signup" className="btn btn-primary">SignUp</Link>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </nav>
