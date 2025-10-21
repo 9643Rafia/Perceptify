@@ -1,0 +1,69 @@
+{
+  "tracks": [
+    {
+      "_id": "track_beginner",
+      "trackId": "TRACK-001",
+      "name": "Beginner Track",
+      "level": 1,
+      "title": "Foundation & Awareness",
+      "description": "Build foundational knowledge about deepfakes, their impact, and basic awareness",
+      "icon": "📊",
+      "prerequisites": [],
+      "estimatedDuration": "8-10 hours",
+      "moduleCount": 3,
+      "status": "active",
+      "order": 1,
+      "completionCriteria": {
+        "minimumScore": 75,
+        "requiredModules": ["module_1.1", "module_1.2", "module_1.3"],
+        "assessmentRequired": true
+      },
+      "createdAt": "2025-01-15T00:00:00Z",
+      "updatedAt": "2025-01-15T00:00:00Z"
+    },
+    {
+      "_id": "track_intermediate",
+      "trackId": "TRACK-002",
+      "name": "Intermediate Track",
+      "level": 2,
+      "title": "Detection & Analysis",
+      "description": "Learn detection techniques, verification tools, and hands-on analysis methods",
+      "icon": "🔍",
+      "prerequisites": ["track_beginner"],
+      "estimatedDuration": "12-15 hours",
+      "moduleCount": 3,
+      "status": "active",
+      "order": 2,
+      "completionCriteria": {
+        "minimumScore": 80,
+        "requiredModules": ["module_2.1", "module_2.2", "module_2.3"],
+        "assessmentRequired": true,
+        "practicalRequired": true
+      },
+      "createdAt": "2025-01-15T00:00:00Z",
+      "updatedAt": "2025-01-15T00:00:00Z"
+    },
+    {
+      "_id": "track_advanced",
+      "trackId": "TRACK-003",
+      "name": "Advanced Track",
+      "level": 3,
+      "title": "Expertise & Prevention",
+      "description": "Master advanced detection technologies, prevention strategies, and become an advocate",
+      "icon": "🚀",
+      "prerequisites": ["track_intermediate"],
+      "estimatedDuration": "15-20 hours",
+      "moduleCount": 4,
+      "status": "active",
+      "order": 3,
+      "completionCriteria": {
+        "minimumScore": 85,
+        "requiredModules": ["module_3.1", "module_3.2", "module_3.3", "module_3.4"],
+        "assessmentRequired": true,
+        "capstoneRequired": true
+      },
+      "createdAt": "2025-01-15T00:00:00Z",
+      "updatedAt": "2025-01-15T00:00:00Z"
+    }
+  ]
+}
