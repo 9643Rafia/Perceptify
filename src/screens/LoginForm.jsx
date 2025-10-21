@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useAuth } from "../context/AuthContext"
+import { adminLogin } from "../services/admin.service"
 
 const LoginForm = () => {
   const navigate = useNavigate()
@@ -47,6 +48,22 @@ const LoginForm = () => {
     }
 
     try {
+      // Check if this is an admin login attempt (specific admin email)
+      const isAdminLogin = formData.email === 'admin@gmail.com'
+
+      if (isAdminLogin) {
+        // Try admin login
+        try {
+          await adminLogin(formData.email, formData.password)
+          navigate("/admin/dashboard")
+          return
+        } catch (adminError) {
+          // If admin login fails, continue with regular user login
+          console.log("Admin login failed, trying user login:", adminError.message)
+        }
+      }
+
+      // Regular user login
       const data = await login(formData.email, formData.password)
       // Redirect based on user role
       if (data.user.role === 'Learner') {

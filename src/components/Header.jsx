@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { Dropdown } from 'react-bootstrap';
 import { useAuth } from '../context/AuthContext';
 
 const Header = () => {
@@ -58,36 +59,29 @@ const Header = () => {
 
                 {/* User Menu */}
                 <div className="d-flex ms-3 align-items-center">
-                  <div className="dropdown">
-                    <button
-                      className="btn btn-link nav-link dropdown-toggle text-white text-decoration-none"
-                      type="button"
+                  <Dropdown align="end">
+                    <Dropdown.Toggle
+                      variant="link"
+                      className="nav-link text-white text-decoration-none border-0 p-0"
                       id="userDropdown"
-                      data-bs-toggle="dropdown"
-                      aria-expanded="false"
                     >
                       <i className="bi bi-person-circle me-1"></i>
                       {user?.fullName || user?.email}
-                    </button>
-                    <ul className="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
-                      <li>
-                        <Link className="dropdown-item" to="/learning-dashboard">
-                          <i className="bi bi-speedometer2 me-2"></i>Dashboard
-                        </Link>
-                      </li>
-                      <li>
-                        <Link className="dropdown-item" to="/learning-dashboard">
-                          <i className="bi bi-graph-up me-2"></i>My Progress
-                        </Link>
-                      </li>
-                      <li><hr className="dropdown-divider" /></li>
-                      <li>
-                        <button className="dropdown-item" onClick={handleLogout}>
-                          <i className="bi bi-box-arrow-right me-2"></i>Logout
-                        </button>
-                      </li>
-                    </ul>
-                  </div>
+                    </Dropdown.Toggle>
+
+                    <Dropdown.Menu>
+                      <Dropdown.Item as={Link} to="/learning-dashboard">
+                        <i className="bi bi-speedometer2 me-2"></i>Dashboard
+                      </Dropdown.Item>
+                      <Dropdown.Item as={Link} to="/learning-dashboard">
+                        <i className="bi bi-graph-up me-2"></i>My Progress
+                      </Dropdown.Item>
+                      <Dropdown.Divider />
+                      <Dropdown.Item onClick={handleLogout}>
+                        <i className="bi bi-box-arrow-right me-2"></i>Logout
+                      </Dropdown.Item>
+                    </Dropdown.Menu>
+                  </Dropdown>
                 </div>
               </>
             ) : (

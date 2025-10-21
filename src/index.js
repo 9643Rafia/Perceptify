@@ -16,6 +16,7 @@ import LessonPlayer from './screens/LessonPlayer';
 import QuizInterface from './screens/QuizInterface';
 import LabInterface from './screens/LabInterface';
 import CertificateView from './screens/CertificateView';
+import AdminDashboard from './screens/AdminDashboard';
 import './assets/styles/bootstrap.custom.css';
 import './assets/styles/index.css';
 import App from './App';
@@ -24,7 +25,8 @@ import ReactDOM from 'react-dom/client';
 import { createBrowserRouter, createRoutesFromElements, Route, RouterProvider } from 'react-router-dom';
 import reportWebVitals from './reportWebVitals';
 import { AuthProvider } from './context/AuthContext';
-import ProtectedRoute from './components/ProtectedRoute'; 
+import ProtectedRoute from './components/ProtectedRoute';
+import AdminProtectedRoute from './components/AdminProtectedRoute'; 
 
 // Define your routes
 const router = createBrowserRouter(
@@ -49,6 +51,9 @@ const router = createBrowserRouter(
       <Route path='quiz/:quizId' element={<ProtectedRoute><QuizInterface /></ProtectedRoute>} />
       <Route path='lab/:labId' element={<ProtectedRoute><LabInterface /></ProtectedRoute>} />
       <Route path='certificate/:certId' element={<ProtectedRoute><CertificateView /></ProtectedRoute>} />
+
+      {/* Admin Routes */}
+      <Route path='admin/dashboard' element={<AdminProtectedRoute><AdminDashboard /></AdminProtectedRoute>} />
     </Route>
   )
 

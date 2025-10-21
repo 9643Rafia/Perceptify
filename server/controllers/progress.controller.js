@@ -10,7 +10,7 @@ const Lesson = require('../models/lesson.model');
 // Get user progress overview
 exports.getUserProgress = async (req, res) => {
   try {
-    const userId = req.user._id;
+    const userId = req.user.id;
 
     let progress = await Progress.findOne({ userId });
 
@@ -31,7 +31,7 @@ exports.getUserProgress = async (req, res) => {
 exports.startTrack = async (req, res) => {
   try {
     const { trackId } = req.params;
-    const userId = req.user._id;
+    const userId = req.user.id;
 
     const track = await Track.findOne({ _id: trackId, status: 'active' });
     if (!track) {
@@ -113,7 +113,7 @@ exports.startTrack = async (req, res) => {
 exports.startLesson = async (req, res) => {
   try {
     const { lessonId } = req.params;
-    const userId = req.user._id;
+    const userId = req.user.id;
 
     const lesson = await Lesson.findOne({ _id: lessonId, status: 'active' });
     if (!lesson) {
@@ -196,7 +196,7 @@ exports.updateLessonProgress = async (req, res) => {
   try {
     const { lessonId } = req.params;
     const { timeSpent, lastPosition, completedContentItems } = req.body;
-    const userId = req.user._id;
+    const userId = req.user.id;
 
     const lesson = await Lesson.findById(lessonId);
     if (!lesson) {
@@ -255,7 +255,7 @@ exports.completeLesson = async (req, res) => {
   try {
     const { lessonId } = req.params;
     const { timeSpent } = req.body;
-    const userId = req.user._id;
+    const userId = req.user.id;
 
     const lesson = await Lesson.findById(lessonId);
     if (!lesson) {
@@ -359,7 +359,7 @@ exports.completeLesson = async (req, res) => {
 // Get dashboard stats
 exports.getDashboardStats = async (req, res) => {
   try {
-    const userId = req.user._id;
+    const userId = req.user.id;
 
     const progress = await Progress.findOne({ userId });
 
@@ -420,7 +420,7 @@ exports.getDashboardStats = async (req, res) => {
 // Get user badges
 exports.getUserBadges = async (req, res) => {
   try {
-    const userId = req.user._id;
+    const userId = req.user.id;
 
     const userBadges = await UserBadge.find({ userId }).sort({ earnedAt: -1 });
 
@@ -459,7 +459,7 @@ exports.getUserBadges = async (req, res) => {
 exports.getLeaderboard = async (req, res) => {
   try {
     const { timeframe = 'all', limit = 100 } = req.query;
-    const userId = req.user._id;
+    const userId = req.user.id;
 
     let dateFilter = {};
     if (timeframe === 'week') {
@@ -503,7 +503,7 @@ exports.getLeaderboard = async (req, res) => {
 // Get analytics
 exports.getAnalytics = async (req, res) => {
   try {
-    const userId = req.user._id;
+    const userId = req.user.id;
 
     const progress = await Progress.findOne({ userId });
 
@@ -581,7 +581,7 @@ exports.getAnalytics = async (req, res) => {
 // Get user certificates
 exports.getUserCertificates = async (req, res) => {
   try {
-    const userId = req.user._id;
+    const userId = req.user.id;
 
     const certificates = await Certificate.find({ userId, isValid: true })
       .sort({ issueDate: -1 })
