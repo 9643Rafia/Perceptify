@@ -29,7 +29,7 @@ exports.getTrackById = async (req, res) => {
     }
 
     // Get modules for this track
-    const modules = await Module.find({ trackId: track._id, status: 'active' }).sort({ order: 1 });
+    const modules = await Module.find({ trackId: track.trackId, status: 'active' }).sort({ order: 1 });
 
     // Get user progress if authenticated
     let progress = null;
@@ -40,7 +40,7 @@ exports.getTrackById = async (req, res) => {
     res.json({
       track,
       modules,
-      progress: progress ? progress.tracksProgress.find(tp => tp.trackId === track._id) : null
+      progress: progress ? progress.tracksProgress.find(tp => tp.trackId === track.trackId) : null
     });
   } catch (error) {
     console.error('Error fetching track:', error);
