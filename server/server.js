@@ -12,6 +12,8 @@ const userRoutes = require("./routes/user.routes")
 const learningRoutes = require("./routes/learning.routes")
 const quizRoutes = require("./routes/quiz.routes")
 const progressRoutes = require("./routes/progress.routes")
+const adminRoutes = require("./routes/admin.routes")
+const forumRoutes = require("./routes/forum.routes")
 
 
 // Connect to database
@@ -32,6 +34,8 @@ app.use("/api/users", userRoutes)
 app.use('/api/learning', learningRoutes)
 app.use('/api/quizzes', quizRoutes)
 app.use('/api/progress', progressRoutes)
+app.use('/api/admin', adminRoutes)
+app.use('/api/forum', forumRoutes)
 
 
 // Error handling middleware

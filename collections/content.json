@@ -10,14 +10,10 @@
       "order": 1,
       "duration": 8,
       "durationType": "minutes",
-      "url": "/media/videos/history-synthetic-media.mp4",
-      "thumbnailUrl": "/media/thumbnails/history-synthetic-media.jpg",
-      "transcriptUrl": "/media/transcripts/history-synthetic-media.pdf",
+      "url": "http://localhost:3000/media/videos/sample-video.mp4",
       "metadata": {
         "resolution": "1080p",
-        "format": "mp4",
-        "subtitles": ["en", "es", "fr", "de"],
-        "captions": true
+        "format": "mp4"
       },
       "isRequired": true,
       "status": "active",
@@ -31,7 +27,7 @@
       "type": "interactive",
       "subType": "timeline",
       "title": "Evolution of Deepfakes (2017-2025)",
-      "description": "Interactive timeline showing key milestones in deepfake technology development",
+      "description": "Timeline showing key milestones in deepfake technology development",
       "order": 2,
       "duration": 5,
       "durationType": "minutes",
@@ -113,10 +109,6 @@
             "definition": "Content that is generated or modified using artificial intelligence and machine learning techniques"
           },
           {
-            "term": "GAN (Generative Adversarial Network)",
-            "definition": "A machine learning architecture consisting of two neural networks that compete to create increasingly realistic synthetic content"
-          },
-          {
             "term": "Face Swap",
             "definition": "Technique that replaces one person's face with another's in video or image content"
           },
@@ -127,14 +119,6 @@
           {
             "term": "Lip-Sync",
             "definition": "Manipulation of mouth movements to match altered or replaced audio"
-          },
-          {
-            "term": "Neural Network",
-            "definition": "Computing system inspired by biological neural networks that learns from data"
-          },
-          {
-            "term": "Deep Learning",
-            "definition": "Subset of machine learning using multi-layered neural networks to learn from large amounts of data"
           },
           {
             "term": "Misinformation",
