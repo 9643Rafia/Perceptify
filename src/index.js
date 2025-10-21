@@ -26,7 +26,7 @@ import { createBrowserRouter, createRoutesFromElements, Route, RouterProvider } 
 import reportWebVitals from './reportWebVitals';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
-import AdminProtectedRoute from './components/AdminProtectedRoute'; 
+import AdminProtectedRoute from './components/AdminProtectedRoute';
 
 // Define your routes
 const router = createBrowserRouter(
