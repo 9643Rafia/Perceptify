@@ -20,6 +20,8 @@ const LearningDashboard = () => {
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
+      setError('');
+
       const [tracksData, progressData, statsData, badgesData] = await Promise.all([
         learningService.getAllTracks(),
         learningService.getUserProgress(),
@@ -27,13 +29,17 @@ const LearningDashboard = () => {
         learningService.getUserBadges()
       ]);
 
-      setTracks(tracksData);
-      setProgress(progressData);
-      setStats(statsData);
-      setBadges(badgesData);
+      console.log('Dashboard data loaded:', { tracksData, progressData, statsData, badgesData });
+
+      setTracks(tracksData.data || tracksData || []);
+      setProgress(progressData.data || progressData);
+      setStats(statsData.data || statsData);
+      setBadges(badgesData.data || badgesData);
     } catch (err) {
-      setError('Failed to load dashboard data');
-      console.error(err);
+      const errorMessage = err.response?.data?.message || err.message || 'Failed to load dashboard data';
+      setError(errorMessage);
+      console.error('Dashboard error:', err);
+      console.error('Error response:', err.response);
     } finally {
       setLoading(false);
     }
@@ -194,13 +200,14 @@ const LearningDashboard = () => {
       </Row>
 
       <Row className="g-4">
-        {tracks.map(track => {
-          const trackProgress = getTrackProgress(track._id);
-          const completion = calculateTrackCompletion(trackProgress);
-          const unlocked = isTrackUnlocked(track);
+        {tracks && tracks.length > 0 ? (
+          tracks.map(track => {
+            const trackProgress = getTrackProgress(track._id);
+            const completion = calculateTrackCompletion(trackProgress);
+            const unlocked = isTrackUnlocked(track);
 
-          return (
-            <Col md={4} key={track._id}>
+            return (
+              <Col md={4} key={track._id}>
               <Card className={`track-card h-100 ${!unlocked ? 'locked' : ''}`}>
                 <Card.Body>
                   <div className="d-flex justify-content-between align-items-start mb-3">
@@ -253,7 +260,17 @@ const LearningDashboard = () => {
               </Card>
             </Col>
           );
-        })}
+        })
+        ) : (
+          <Col>
+            <Card className="text-center p-5">
+              <Card.Body>
+                <h5>No Learning Tracks Available</h5>
+                <p className="text-muted">Please contact your administrator or check back later.</p>
+              </Card.Body>
+            </Card>
+          </Col>
+        )}
       </Row>
 
       {/* Recent Badges */}
