@@ -170,27 +170,53 @@ exports.getLessonById = async (req, res) => {
     }
 
       // Get content for this lesson
-      // Content documents may reference the lesson by either the ObjectId (_id), the external lessonId string (lesson.lessonId),
+      // Content documents in the collections may reference the lesson using different id formats:
+      // - the Lesson._id (ObjectId as string)
+      // - the Lesson.lessonId (external id like 'LES-1.1.1')
+      // - legacy/normalized ids used in collections (e.g. 'lesson_1.1.1')
       // or the lesson may list content items by external contentId values in lesson.contentItems.
       const contentQueryOr = [];
-      contentQueryOr.push({ lessonId: lesson._id });
-      if (lesson.lessonId) contentQueryOr.push({ lessonId: lesson.lessonId });
+
+      // Build a list of possible lesson id values to match against Content.lessonId (which is stored as String)
+      const possibleLessonIds = [];
+      possibleLessonIds.push(String(lesson._id));
+      if (lesson.lessonId) {
+        possibleLessonIds.push(String(lesson.lessonId));
+
+        // normalized variant: convert 'LES-1.1.1' -> 'lesson_1.1.1' (lowercase, replace prefix and dashes)
+        const normalized = String(lesson.lessonId).toLowerCase().replace(/^les[-_]/, 'lesson_').replace(/-/g, '_');
+        if (!possibleLessonIds.includes(normalized)) {
+          possibleLessonIds.push(normalized);
+        }
+      }
+
+      // Add a single $or clause that matches any of the possible lessonId strings
+      if (possibleLessonIds.length > 0) {
+        contentQueryOr.push({ lessonId: { $in: possibleLessonIds } });
+      }
+
+      // Also match explicit contentItems references by contentId or by _id if they look like ObjectId strings
       if (Array.isArray(lesson.contentItems) && lesson.contentItems.length > 0) {
-        // Match on Content.contentId (external id from collections) or on _id if the array contains ObjectId-like strings
         contentQueryOr.push({ contentId: { $in: lesson.contentItems } });
-        // attempt to match any items that look like ObjectId strings
         const possibleObjectIds = lesson.contentItems.filter(ci => /^[0-9a-fA-F]{24}$/.test(ci));
         if (possibleObjectIds.length > 0) {
           contentQueryOr.push({ _id: { $in: possibleObjectIds } });
         }
       }
 
-      const content = await Content.find({
+      // Diagnostic: build the actual query object and log it so we can see what the running server is searching for
+      const queryObj = {
         $and: [
           { $or: contentQueryOr },
           { status: 'active' }
         ]
-      }).sort({ order: 1 });
+      };
+
+      console.log('🔍 GET LESSON BY ID - possibleLessonIds:', possibleLessonIds);
+      console.log('🔍 GET LESSON BY ID - contentQueryOr:', JSON.stringify(contentQueryOr));
+      console.log('🔍 GET LESSON BY ID - queryObj:', JSON.stringify(queryObj));
+
+      const content = await Content.find(queryObj).sort({ order: 1 });
 
       console.log('🎯 GET LESSON BY ID - lesson._id:', String(lesson._id), 'lesson.lessonId:', lesson.lessonId);
       console.log('🎯 GET LESSON BY ID - content items matched:', content.length);
