@@ -97,10 +97,11 @@ class LearningService {
     return response.data;
   }
 
-  async completeLesson(lessonId, timeSpent) {
-    const response = await api.post(`/progress/lessons/${lessonId}/complete`, {
-      timeSpent
-    });
+  async completeLesson(lessonId, timeSpent, options = {}) {
+    const body = { timeSpent };
+    if (options.skipQuiz) body.skipQuiz = true;
+    if (options.forceModuleComplete) body.forceModuleComplete = true;
+    const response = await api.post(`/progress/lessons/${lessonId}/complete`, body);
     return response.data;
   }
 

@@ -320,13 +320,40 @@ exports.updateLessonProgress = async (req, res) => {
       return res.status(400).json({ message: 'Progress not found' });
     }
 
-    // Find the lesson progress
-    const trackProgress = progress.tracksProgress.find(tp => tp.trackId === module.trackId);
-    const moduleProgress = trackProgress?.modulesProgress.find(mp => mp.moduleId === module._id);
-    const lessonProgress = moduleProgress?.lessonsProgress.find(lp => lp.lessonId === lessonId);
+  // Find the lesson progress
+  const trackProgress = progress.tracksProgress.find(tp => tp.trackId === module.trackId);
+  let moduleProgress = trackProgress?.modulesProgress.find(mp => mp.moduleId === module._id);
+  let lessonProgress = moduleProgress?.lessonsProgress.find(lp => lp.lessonId === lessonId);
 
     if (!lessonProgress) {
-      return res.status(400).json({ message: 'Lesson not started' });
+      // Be resilient: create lessonProgress on-demand (similar to startLesson flow)
+      console.log('⚠️ COMPLETE LESSON - lessonProgress missing, creating on-demand');
+
+      if (!moduleProgress) {
+        // Create moduleProgress on-demand
+        const newModuleProgress = {
+          moduleId: module._id,
+          status: 'unlocked',
+          lessonsProgress: [],
+          quizAttempts: [],
+          labAttempts: [],
+          startedAt: new Date()
+        };
+        trackProgress.modulesProgress.push(newModuleProgress);
+        moduleProgress = newModuleProgress;
+      }
+
+      lessonProgress = {
+        lessonId: lesson._id,
+        status: 'in_progress',
+        timeSpent: 0,
+        lastPosition: 0,
+        completedContentItems: [],
+        startedAt: new Date()
+      };
+
+      moduleProgress.lessonsProgress.push(lessonProgress);
+      console.log('⚠️ COMPLETE LESSON - created lessonProgress on-demand for lesson', String(lesson._id));
     }
 
     // Update progress
@@ -364,7 +391,7 @@ exports.updateLessonProgress = async (req, res) => {
 exports.completeLesson = async (req, res) => {
   try {
     const { lessonId } = req.params;
-    const { timeSpent } = req.body;
+  const { timeSpent, skipQuiz, forceModuleComplete } = req.body;
     const userId = req.user.id;
 
     const lesson = await Lesson.findById(lessonId);
@@ -379,13 +406,46 @@ exports.completeLesson = async (req, res) => {
       return res.status(400).json({ message: 'Progress not found' });
     }
 
-    // Find the lesson progress
-    const trackProgress = progress.tracksProgress.find(tp => tp.trackId === module.trackId);
-    const moduleProgress = trackProgress?.modulesProgress.find(mp => mp.moduleId === module._id);
-    const lessonProgress = moduleProgress?.lessonsProgress.find(lp => lp.lessonId === lessonId);
+    // Find the lesson progress (be resilient: create missing pieces on-demand)
+    let trackProgress = progress.tracksProgress.find(tp => String(tp.trackId) === String(module.trackId));
+    if (!trackProgress) {
+      // Create a new trackProgress entry on-demand (minimal fields)
+      trackProgress = {
+        trackId: module.trackId,
+        status: 'unlocked',
+        modulesProgress: [],
+        startedAt: new Date()
+      };
+      progress.tracksProgress.push(trackProgress);
+    }
 
+    let moduleProgress = trackProgress.modulesProgress.find(mp => String(mp.moduleId) === String(module._id));
+    if (!moduleProgress) {
+      // Create moduleProgress on-demand
+      moduleProgress = {
+        moduleId: module._id,
+        status: 'unlocked',
+        lessonsProgress: [],
+        quizAttempts: [],
+        labAttempts: [],
+        startedAt: new Date()
+      };
+      trackProgress.modulesProgress.push(moduleProgress);
+    }
+
+    let lessonProgress = moduleProgress.lessonsProgress.find(lp => String(lp.lessonId) === String(lesson._id));
     if (!lessonProgress) {
-      return res.status(400).json({ message: 'Lesson not started' });
+      // Create lessonProgress on-demand
+      lessonProgress = {
+        lessonId: lesson._id,
+        status: 'in_progress',
+        timeSpent: 0,
+        lastPosition: 0,
+        completedContentItems: [],
+        startedAt: new Date()
+      };
+      moduleProgress.lessonsProgress.push(lessonProgress);
+      console.log('⚠️ COMPLETE LESSON - created lessonProgress on-demand for lesson', String(lesson._id));
     }
 
     // Mark as completed
@@ -423,8 +483,29 @@ exports.completeLesson = async (req, res) => {
       }
     }
 
-    // If all lessons completed and no quiz, unlock next module
-    if (allLessonsCompleted && !module.quizId && !module.requiresLabCompletion) {
+    // If requested to skip module-level quiz or if all lessons completed and no module quiz, unlock next module
+    if ((skipQuiz || forceModuleComplete) || (allLessonsCompleted && !module.quizId && !module.requiresLabCompletion)) {
+      // If skipping quiz but module has a quizId, record a synthetic passed attempt so analytics reflect completion
+      if (skipQuiz && module.quizId) {
+        try {
+          const attemptNumber = (moduleProgress.quizAttempts?.length || 0) + 1;
+          moduleProgress.quizAttempts.push({
+            attemptNumber,
+            score: 100,
+            passed: true,
+            answers: [],
+            timeSpent: 0,
+            completedAt: new Date()
+          });
+          moduleProgress.bestQuizScore = Math.max(moduleProgress.bestQuizScore || 0, 100);
+        } catch (e) {
+          console.warn('Warning: failed to record synthetic quiz attempt for module', module._id, e.message || e);
+        }
+      }
+      // mark module completed
+      moduleProgress.status = 'completed';
+      moduleProgress.completedAt = new Date();
+
       const nextModule = await Module.findOne({
         trackId: module.trackId,
         order: { $gt: module.order },
