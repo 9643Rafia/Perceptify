@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Container, Row, Col, Card, Button, Alert } from 'react-bootstrap';
 import { useParams, useNavigate } from 'react-router-dom';
 import { FaArrowLeft, FaArrowRight, FaCheck } from 'react-icons/fa';
@@ -10,7 +10,7 @@ const LessonPlayer = () => {
   const [lesson, setLesson] = useState(null);
   const [content, setContent] = useState([]);
   const [currentContentIndex, setCurrentContentIndex] = useState(0);
-  const [lessonProgress, setLessonProgress] = useState(null);
+  // lessonProgress intentionally not stored in component state (not used in UI)
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -18,6 +18,45 @@ const LessonPlayer = () => {
   const [completedItems, setCompletedItems] = useState([]);
   const timerRef = useRef(null);
   const saveIntervalRef = useRef(null);
+  const videoRef = useRef(null);
+  const timeSpentRef = useRef(0);
+  const [videoFallbackUrl, setVideoFallbackUrl] = useState(null);
+  const [videoFallbackAttempted, setVideoFallbackAttempted] = useState(false);
+
+  const fetchLessonData = useCallback(async () => {
+    try {
+      setLoading(true);
+      console.log('🎥 LessonPlayer: Fetching lesson data for lessonId:', lessonId);
+
+      const data = await learningService.getLessonById(lessonId);
+      console.log('🎥 LessonPlayer: Lesson data received:', data);
+
+    setLesson(data.lesson);
+    // Remove mini-quiz content from lesson UI entirely so lessons don't show embedded quiz forms
+    const filtered = (data.content || []).filter(i => i.type !== 'quiz');
+    setContent(filtered);
+
+      console.log('🎥 LessonPlayer: Content items:', data.content);
+      data.content.forEach((item, index) => {
+        console.log(`🎥 Content ${index + 1}:`, {
+          title: item.title,
+          type: item.type,
+          url: item.url
+        });
+      });
+
+      if (data.progress) {
+        setTimeSpent(data.progress.timeSpent || 0);
+        timeSpentRef.current = data.progress.timeSpent || 0;
+        setCompletedItems(data.progress.completedContentItems || []);
+      }
+    } catch (err) {
+      setError('Failed to load lesson');
+      console.error('❌ LessonPlayer: Error fetching lesson:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [lessonId]);
 
   useEffect(() => {
     fetchLessonData();
@@ -25,61 +64,69 @@ const LessonPlayer = () => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
       if (saveIntervalRef.current) clearInterval(saveIntervalRef.current);
+      // cleanup blob url
+      if (videoFallbackUrl) {
+        try { URL.revokeObjectURL(videoFallbackUrl); } catch (e) {}
+      }
     };
-  }, [lessonId]);
+  }, [fetchLessonData, videoFallbackUrl]);
 
+
+
+    const autoSaveProgress = useCallback(async () => {
+      if (!lesson || timeSpentRef.current === 0) return;
+
+      try {
+        setSaving(true);
+        await learningService.updateLessonProgress(lessonId, {
+          timeSpent: timeSpentRef.current,
+          lastPosition: currentContentIndex,
+          completedContentItems: completedItems
+        });
+      } catch (err) {
+        console.error('Auto-save failed:', err);
+      } finally {
+        setSaving(false);
+      }
+    }, [lesson, lessonId, currentContentIndex, completedItems]);
   useEffect(() => {
-    // Start timer when lesson loaded
-    if (lesson && !timerRef.current) {
+  // Start timer when lesson loaded: increment a ref every second to avoid
+    // forcing a full re-render every tick. We update visible state less
+    // frequently (every 5s) so the UI doesn't re-render every second.
+    if (!lesson) return;
+
+    if (!timerRef.current) {
       timerRef.current = setInterval(() => {
-        setTimeSpent(prev => prev + 1);
+        timeSpentRef.current += 1;
       }, 1000);
     }
 
+    // Sync ref -> state every 5 seconds for UI and occasional updates
+    let syncInterval = setInterval(() => {
+      setTimeSpent(timeSpentRef.current);
+    }, 5000);
+
     // Auto-save every 30 seconds
-    if (lesson && !saveIntervalRef.current) {
+    if (!saveIntervalRef.current) {
       saveIntervalRef.current = setInterval(() => {
         autoSaveProgress();
       }, 30000);
     }
-  }, [lesson, timeSpent, completedItems]);
 
-  const fetchLessonData = async () => {
-    try {
-      setLoading(true);
-      const data = await learningService.getLessonById(lessonId);
-      setLesson(data.lesson);
-      setContent(data.content);
-      setLessonProgress(data.progress);
-
-      if (data.progress) {
-        setTimeSpent(data.progress.timeSpent || 0);
-        setCompletedItems(data.progress.completedContentItems || []);
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
       }
-    } catch (err) {
-      setError('Failed to load lesson');
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
+      if (saveIntervalRef.current) {
+        clearInterval(saveIntervalRef.current);
+        saveIntervalRef.current = null;
+      }
+      if (syncInterval) clearInterval(syncInterval);
+    };
+  }, [lesson, autoSaveProgress]);
 
-  const autoSaveProgress = async () => {
-    if (!lesson || timeSpent === 0) return;
 
-    try {
-      setSaving(true);
-      await learningService.updateLessonProgress(lessonId, {
-        timeSpent,
-        lastPosition: currentContentIndex,
-        completedContentItems: completedItems
-      });
-    } catch (err) {
-      console.error('Auto-save failed:', err);
-    } finally {
-      setSaving(false);
-    }
-  };
 
   const markContentComplete = (contentId) => {
     if (!completedItems.includes(contentId)) {
@@ -101,12 +148,18 @@ const LessonPlayer = () => {
     }
   };
 
+  // quizzes are filtered out from `content`, so no need for quiz-skipping helpers
+
   const handleCompleteLesson = async () => {
     try {
       const currentContent = content[currentContentIndex];
-      markContentComplete(currentContent._id);
+      // Guard: content may be empty (we filtered out quizzes), so only mark if present
+      if (currentContent) markContentComplete(currentContent._id);
 
-      const result = await learningService.completeLesson(lessonId, timeSpent);
+      // No confirmation: complete lesson immediately even if some items are incomplete
+
+      // Request server to skip quiz/module-level requirements when completing
+      const result = await learningService.completeLesson(lessonId, timeSpent, { skipQuiz: true, forceModuleComplete: true });
 
       if (result.xpEarned) {
         alert(`Lesson completed! You earned ${result.xpEarned} XP!${result.leveledUp ? ' Level Up!' : ''}`);
@@ -122,19 +175,73 @@ const LessonPlayer = () => {
     if (!content[currentContentIndex]) return null;
 
     const currentContent = content[currentContentIndex];
-
+    // moved logging to a useEffect to avoid logging on every timer tick
     switch (currentContent.type) {
       case 'video':
+        console.log('🎬 LessonPlayer: Rendering video with URL:', currentContent.url);
         return (
           <div className="lms-video-wrapper">
+            <div className="mb-2 small text-muted">Source: {videoFallbackUrl || currentContent.url}</div>
             <video
               className="lms-video-player"
               controls
-              src={currentContent.url}
+              preload="metadata"
+              crossOrigin="anonymous"
+              ref={videoRef}
+              src={videoFallbackUrl || currentContent.url}
+              onLoadStart={() => console.log('🎬 Video: Load start')}
+              onLoadedData={() => console.log('🎬 Video: Loaded data')}
+              onCanPlay={() => console.log('🎬 Video: Can play')}
+              onWaiting={() => console.log('🎬 Video: Waiting for more data')}
+              onStalled={() => console.log('🎬 Video: Stalled')}
+              onProgress={() => console.log('🎬 Video: Progress event')}
+              onError={async (e) => {
+                console.error('❌ Video Error event:', e);
+                console.error('❌ Video Error details:', e.target?.error);
+                // Try a one-time fallback: fetch the file and create a blob URL
+                if (!videoFallbackAttempted && currentContent.url) {
+                  setVideoFallbackAttempted(true);
+                  try {
+                    console.log('🎬 Video: attempting fallback fetch for', currentContent.url);
+                    const resp = await fetch(currentContent.url, { method: 'GET' });
+                    if (!resp.ok) {
+                      console.error('🎬 Video fallback fetch failed status:', resp.status);
+                      return;
+                    }
+                    const blob = await resp.blob();
+                    const blobUrl = URL.createObjectURL(blob);
+                    setVideoFallbackUrl(blobUrl);
+                    // load the blob into the player
+                    if (videoRef.current) {
+                      videoRef.current.src = blobUrl;
+                      videoRef.current.load();
+                      try { await videoRef.current.play(); } catch (playErr) { console.log('🎬 Video: play() after fallback failed:', playErr.message); }
+                    }
+                  } catch (err) {
+                    console.error('🎬 Video fallback fetch error:', err.message || err);
+                  }
+                }
+              }}
               onEnded={() => markContentComplete(currentContent._id)}
             >
               Your browser does not support the video tag.
             </video>
+            <div className="mt-2">
+              <button className="btn btn-sm btn-outline-secondary me-2" onClick={async () => {
+                // clear fallback and attempt reload
+                if (videoFallbackUrl) {
+                  try { URL.revokeObjectURL(videoFallbackUrl); } catch (e) {}
+                  setVideoFallbackUrl(null);
+                }
+                setVideoFallbackAttempted(false);
+                if (videoRef.current) {
+                  try { videoRef.current.pause(); } catch (e) {}
+                  videoRef.current.src = currentContent.url;
+                  videoRef.current.load();
+                  try { await videoRef.current.play(); } catch (e) { console.log('Retry play failed', e.message); }
+                }
+              }}>Retry</button>
+            </div>
           </div>
         );
 
@@ -173,6 +280,21 @@ const LessonPlayer = () => {
     }
   };
 
+  // Log when the currently rendered content actually changes
+  const currentContentId = content[currentContentIndex]?._id || null;
+  useEffect(() => {
+    if (!currentContentId) return;
+    const current = content[currentContentIndex];
+    console.log('🎬 LessonPlayer: Rendering content:', {
+      index: currentContentIndex,
+      title: current?.title,
+      type: current?.type,
+      url: current?.url
+    });
+  }, [currentContentIndex, currentContentId, content]);
+
+  // quizzes are filtered out so there's nothing to auto-skip
+
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -197,9 +319,10 @@ const LessonPlayer = () => {
     );
   }
 
-  const isLastContent = currentContentIndex === content.length - 1;
-  const allContentCompleted = completedItems.length === content.length;
-
+  const hasNoRenderableContent = content.length === 0;
+  const isLastContent = hasNoRenderableContent ? true : currentContentIndex === content.length - 1;
+  // Treat quiz-type content with missing quizId as not required for completion
+  
   return (
     <div className="lesson-player-container">
       {error && (
@@ -250,7 +373,7 @@ const LessonPlayer = () => {
                 />
               ))}
               <small className="text-muted">
-                {currentContentIndex + 1} / {content.length}
+                {content.length === 0 ? '0 / 0' : `${currentContentIndex + 1} / ${content.length}`}
               </small>
             </div>
           </Col>
@@ -277,14 +400,17 @@ const LessonPlayer = () => {
               </div>
 
               {isLastContent ? (
+                <>
                 <Button
                   variant="success"
                   onClick={handleCompleteLesson}
-                  disabled={!allContentCompleted}
+                  // Allow force-complete: user can complete even if not all items are marked completed
+                  disabled={false}
                 >
                   <FaCheck className="me-2" />
                   Complete Lesson
                 </Button>
+                </>
               ) : (
                 <Button
                   variant="primary"
@@ -303,23 +429,26 @@ const LessonPlayer = () => {
                 <h6 className="mb-3">Lesson Content</h6>
                 <div className="list-group list-group-flush">
                   {content.map((item, index) => (
-                    <div
-                      key={item._id}
-                      className={`list-group-item list-group-item-action ${
-                        index === currentContentIndex ? 'active' : ''
-                      } ${completedItems.includes(item._id) ? 'list-group-item-success' : ''}`}
-                      style={{ cursor: 'pointer', fontSize: '0.875rem' }}
-                      onClick={() => setCurrentContentIndex(index)}
-                    >
-                      <div className="d-flex align-items-center">
-                        <span className="me-2">{index + 1}.</span>
-                        <span className="flex-grow-1">{item.title}</span>
-                        {completedItems.includes(item._id) && (
-                          <FaCheck className="text-success" size={12} />
-                        )}
+                      <div
+                        key={item._id}
+                        className={`list-group-item list-group-item-action ${
+                          index === currentContentIndex ? 'active' : ''
+                        } ${completedItems.includes(item._id) ? 'list-group-item-success' : ''}`}
+                        style={{ cursor: 'pointer', fontSize: '0.875rem' }}
+                          onClick={() => {
+                          // quizzes are filtered out earlier, so simply set the index
+                          setCurrentContentIndex(index);
+                        }}
+                      >
+                        <div className="d-flex align-items-center">
+                          <span className="me-2">{index + 1}.</span>
+                          <span className="flex-grow-1">{item.title}</span>
+                          {completedItems.includes(item._id) && (
+                            <FaCheck className="text-success" size={12} />
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
                 </div>
 
                 <hr />
@@ -327,7 +456,7 @@ const LessonPlayer = () => {
                 <div className="small">
                   <div className="d-flex justify-content-between mb-2">
                     <span>Completed:</span>
-                    <strong>{completedItems.length} / {content.length}</strong>
+                    <strong>{content.length === 0 ? '0 / 0' : `${completedItems.length} / ${content.length}`}</strong>
                   </div>
                   <div className="d-flex justify-content-between">
                     <span>Time:</span>
