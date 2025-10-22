@@ -279,7 +279,17 @@ const LearningDashboard = () => {
               </Card>
             </Col>
           );
-        })}
+        })
+        ) : (
+          <Col>
+            <Card className="text-center p-5">
+              <Card.Body>
+                <h5>No Learning Tracks Available</h5>
+                <p className="text-muted">Please contact your administrator or check back later.</p>
+              </Card.Body>
+            </Card>
+          </Col>
+        )}
       </Row>
 
       {/* Recent Badges */}
