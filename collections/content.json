@@ -10,7 +10,7 @@
       "order": 1,
       "duration": 8,
       "durationType": "minutes",
-      "url": "http://localhost:3000/media/videos/sample-video.mp4",
+      "url": "http://localhost:5000/media/videos/sample-video.mp4",
       "metadata": {
         "resolution": "1080p",
         "format": "mp4"

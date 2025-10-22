@@ -20,6 +20,8 @@ const LearningDashboard = () => {
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
+      console.log('📊 LearningDashboard: Starting to fetch data...');
+      
       const [tracksData, progressData, statsData, badgesData] = await Promise.all([
         learningService.getAllTracks(),
         learningService.getUserProgress(),
@@ -27,13 +29,22 @@ const LearningDashboard = () => {
         learningService.getUserBadges()
       ]);
 
+      console.log('📊 LearningDashboard: Data received:', {
+        tracksData,
+        progressData,
+        statsData,
+        badgesData
+      });
+
       setTracks(tracksData);
       setProgress(progressData);
       setStats(statsData);
       setBadges(badgesData);
+      
+      console.log('📊 LearningDashboard: State updated, tracks count:', tracksData?.length);
     } catch (err) {
       setError('Failed to load dashboard data');
-      console.error(err);
+      console.error('❌ LearningDashboard: Error fetching data:', err);
     } finally {
       setLoading(false);
     }
@@ -41,7 +52,14 @@ const LearningDashboard = () => {
 
   const handleStartTrack = async (trackId) => {
     try {
-      await learningService.startTrack(trackId);
+      const response = await learningService.startTrack(trackId);
+      // Some server responses include a flag/modulesCount to indicate modules were populated
+      const modulesAdded = response?.data?.modulesAdded || response?.headers?.['x-modules-added'] === 'true';
+      if (modulesAdded) {
+        // Re-fetch progress to ensure UI has the latest modulesProgress
+        const refreshedProgress = await learningService.getUserProgress();
+        setProgress(refreshedProgress);
+      }
       navigate(`/course/${trackId}`);
     } catch (err) {
       setError('Failed to start track: ' + err.response?.data?.message);
@@ -194,10 +212,18 @@ const LearningDashboard = () => {
       </Row>
 
       <Row className="g-4">
+        {console.log('🎨 LearningDashboard: Rendering tracks:', tracks)}
         {tracks.map(track => {
           const trackProgress = getTrackProgress(track._id);
           const completion = calculateTrackCompletion(trackProgress);
           const unlocked = isTrackUnlocked(track);
+
+          console.log('🎨 LearningDashboard: Rendering track:', {
+            track: track,
+            trackProgress,
+            completion,
+            unlocked
+          });
 
           return (
             <Col md={4} key={track._id}>

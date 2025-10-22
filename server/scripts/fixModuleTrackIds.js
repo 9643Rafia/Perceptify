@@ -2,9 +2,9 @@ const mongoose = require('mongoose');
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
+// Import models
+const Track = require('../models/track.model');
 const Module = require('../models/module.model');
-const Lesson = require('../models/lesson.model');
-const Content = require('../models/content.model');
 
 // MongoDB connection
 const connectDB = async () => {
@@ -18,140 +18,67 @@ const connectDB = async () => {
   }
 };
 
-// Fix module trackIds
 const fixModuleTrackIds = async () => {
   console.log('🔧 Fixing module trackId references...\n');
 
   try {
     await connectDB();
 
-    // Mapping from old trackId format to new format
-    const trackIdMapping = {
-      'track_beginner': 'TRACK-001',
-      'track_intermediate': 'TRACK-002',
-      'track_advanced': 'TRACK-003'
+    // Create mapping of old trackId to new ObjectId
+    const trackMapping = {
+      'track_beginner': null,
+      'track_intermediate': null,
+      'track_advanced': null
     };
 
-    // Mapping from old moduleId format to new format
-    const moduleIdMapping = {
-      'module_1.1': 'MOD-1.1',
-      'module_1.2': 'MOD-1.2',
-      'module_1.3': 'MOD-1.3',
-      'module_2.1': 'MOD-2.1',
-      'module_2.2': 'MOD-2.2',
-      'module_2.3': 'MOD-2.3',
-      'module_3.1': 'MOD-3.1',
-      'module_3.2': 'MOD-3.2',
-      'module_3.3': 'MOD-3.3',
-      'module_3.4': 'MOD-3.4'
-    };
+    // Get tracks and build mapping
+    const beginnerTrack = await Track.findOne({ trackId: 'TRACK-001' });
+    const intermediateTrack = await Track.findOne({ trackId: 'TRACK-002' });
+    const advancedTrack = await Track.findOne({ trackId: 'TRACK-003' });
 
-    // Mapping from old lessonId format to new format
-    const lessonIdMapping = {
-      'lesson_1.1.1': 'LES-1.1.1',
-      'lesson_1.1.2': 'LES-1.1.2',
-      'lesson_1.1.3': 'LES-1.1.3',
-      'lesson_1.2.1': 'LES-1.2.1',
-      'lesson_1.2.2': 'LES-1.2.2',
-      'lesson_1.2.3': 'LES-1.2.3',
-      'lesson_1.3.1': 'LES-1.3.1',
-      'lesson_1.3.2': 'LES-1.3.2',
-      'lesson_1.3.3': 'LES-1.3.3',
-      'lesson_2.1.1': 'LES-2.1.1',
-      'lesson_2.1.2': 'LES-2.1.2',
-      'lesson_2.1.3': 'LES-2.1.3',
-      'lesson_2.2.1': 'LES-2.2.1',
-      'lesson_2.2.2': 'LES-2.2.2',
-      'lesson_2.2.3': 'LES-2.2.3',
-      'lesson_2.3.1': 'LES-2.3.1',
-      'lesson_3.1.1': 'LES-3.1.1',
-      'lesson_3.1.2': 'LES-3.1.2',
-      'lesson_3.1.3': 'LES-3.1.3',
-      'lesson_3.2.1': 'LES-3.2.1',
-      'lesson_3.2.2': 'LES-3.2.2',
-      'lesson_3.2.3': 'LES-3.2.3',
-      'lesson_3.3.1': 'LES-3.3.1',
-      'lesson_3.3.2': 'LES-3.3.2',
-      'lesson_3.3.3': 'LES-3.3.3',
-      'lesson_3.4.1': 'LES-3.4.1'
-    };
+    if (beginnerTrack) {
+      trackMapping['track_beginner'] = beginnerTrack._id;
+      console.log(`✅ Found Beginner Track: ${beginnerTrack._id}`);
+    }
+    if (intermediateTrack) {
+      trackMapping['track_intermediate'] = intermediateTrack._id;
+      console.log(`✅ Found Intermediate Track: ${intermediateTrack._id}`);
+    }
+    if (advancedTrack) {
+      trackMapping['track_advanced'] = advancedTrack._id;
+      console.log(`✅ Found Advanced Track: ${advancedTrack._id}`);
+    }
 
-    console.log('📝 Updating Module trackIds...\n');
+    console.log('\n� Updating modules...');
 
-    const modules = await Module.find();
-    let moduleUpdateCount = 0;
-
-    for (const module of modules) {
-      const oldTrackId = module.trackId;
-      const newTrackId = trackIdMapping[oldTrackId];
-
-      if (newTrackId && newTrackId !== oldTrackId) {
-        module.trackId = newTrackId;
-        await module.save();
-        console.log(`✅ Updated module "${module.name}": ${oldTrackId} → ${newTrackId}`);
-        moduleUpdateCount++;
-      } else if (!newTrackId) {
-        console.log(`⚠️  No mapping found for trackId: ${oldTrackId} in module ${module.name}`);
+    // Update modules with correct trackId references
+    let updateCount = 0;
+    
+    for (const [oldTrackId, newTrackId] of Object.entries(trackMapping)) {
+      if (newTrackId) {
+        const result = await Module.updateMany(
+          { trackId: oldTrackId },
+          { trackId: newTrackId }
+        );
+        console.log(`✅ Updated ${result.modifiedCount} modules from ${oldTrackId} to ${newTrackId}`);
+        updateCount += result.modifiedCount;
       }
     }
 
-    console.log(`\n✅ Updated ${moduleUpdateCount} modules\n`);
+    console.log(`\n🎉 Total modules updated: ${updateCount}`);
 
-    console.log('📝 Updating Lesson moduleIds...\n');
-
-    const lessons = await Lesson.find();
-    let lessonUpdateCount = 0;
-
-    for (const lesson of lessons) {
-      const oldModuleId = lesson.moduleId;
-      const newModuleId = moduleIdMapping[oldModuleId];
-
-      if (newModuleId && newModuleId !== oldModuleId) {
-        lesson.moduleId = newModuleId;
-        await lesson.save();
-        console.log(`✅ Updated lesson "${lesson.name}": ${oldModuleId} → ${newModuleId}`);
-        lessonUpdateCount++;
-      } else if (!newModuleId) {
-        console.log(`⚠️  No mapping found for moduleId: ${oldModuleId} in lesson ${lesson.name}`);
-      }
+    // Verify the fix
+    console.log('\n� Verification:');
+    const tracks = await Track.find({}).sort({ order: 1 });
+    
+    for (const track of tracks) {
+      const modules = await Module.find({ trackId: track._id });
+      console.log(`📊 ${track.name}: ${modules.length} modules`);
     }
-
-    console.log(`\n✅ Updated ${lessonUpdateCount} lessons\n`);
-
-    console.log('📝 Updating Content lessonIds...\n');
-
-    const contents = await Content.find();
-    let contentUpdateCount = 0;
-
-    for (const content of contents) {
-      const oldLessonId = content.lessonId;
-      const newLessonId = lessonIdMapping[oldLessonId];
-
-      if (newLessonId && newLessonId !== oldLessonId) {
-        content.lessonId = newLessonId;
-        await content.save();
-        console.log(`✅ Updated content "${content.title}": ${oldLessonId} → ${newLessonId}`);
-        contentUpdateCount++;
-      } else if (!newLessonId) {
-        console.log(`⚠️  No mapping found for lessonId: ${oldLessonId} in content ${content.title}`);
-      }
-    }
-
-    console.log(`\n✅ Updated ${contentUpdateCount} content items\n`);
-
-    console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('✅ Migration completed successfully!');
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log(`\n📊 Summary:`);
-    console.log(`   • Modules updated: ${moduleUpdateCount}`);
-    console.log(`   • Lessons updated: ${lessonUpdateCount}`);
-    console.log(`   • Content items updated: ${contentUpdateCount}`);
-    console.log(`\n🎉 Modules should now appear in the course view!\n`);
 
     process.exit(0);
   } catch (error) {
-    console.error('❌ Error fixing trackIds:', error.message);
-    console.error(error);
+    console.error('❌ Error:', error.message);
     process.exit(1);
   }
 };

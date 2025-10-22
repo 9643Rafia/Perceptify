@@ -33,27 +33,34 @@ exports.startTrack = async (req, res) => {
     const { trackId } = req.params;
     const userId = req.user.id;
 
+    console.log('🚦 [startTrack] called - userId:', userId, 'trackId:', trackId);
+
     const track = await Track.findOne({ _id: trackId, status: 'active' });
+    console.log('🚦 [startTrack] track found:', !!track, track ? track._id.toString() : null);
     if (!track) {
       return res.status(404).json({ message: 'Track not found' });
     }
 
     let progress = await Progress.findOne({ userId });
+    console.log('🚦 [startTrack] existing progress found:', !!progress);
     if (!progress) {
       progress = new Progress({ userId });
+      console.log('🚦 [startTrack] created new progress for user');
     }
 
-    // Check if track already started
-    let trackProgress = progress.tracksProgress.find(tp => tp.trackId === track._id);
+    // Check if track already started - use string compare to avoid ObjectId/string mismatch
+    let trackProgress = progress.tracksProgress.find(tp => String(tp.trackId) === String(track._id));
+    console.log('🚦 [startTrack] existing trackProgress found:', !!trackProgress);
 
     if (!trackProgress) {
       // Check prerequisites
       if (track.prerequisites && track.prerequisites.length > 0) {
         const prerequisitesCompleted = track.prerequisites.every(prereqId => {
-          const prereqProgress = progress.tracksProgress.find(tp => tp.trackId === prereqId);
+          const prereqProgress = progress.tracksProgress.find(tp => String(tp.trackId) === String(prereqId));
           return prereqProgress && prereqProgress.status === 'completed';
         });
 
+        console.log('🚦 [startTrack] prerequisitesCompleted:', prerequisitesCompleted);
         if (!prerequisitesCompleted) {
           return res.status(400).json({ message: 'Prerequisites not completed' });
         }
@@ -69,38 +76,58 @@ exports.startTrack = async (req, res) => {
 
       progress.tracksProgress.push(trackProgress);
       progress.currentTrack = track._id;
+      console.log('🟢 [startTrack] new trackProgress pushed');
     }
 
-    // Get first module and unlock it
-    const firstModule = await Module.findOne({ trackId: track._id, status: 'active' }).sort({ order: 1 });
+    // Unlock all modules for this track
+    const allModules = await Module.find({ trackId: track._id, status: 'active' }).sort({ order: 1 });
+    console.log('🔎 [startTrack] modules found for track:', allModules.length);
+    allModules.forEach(m => console.log('   -', String(m._id), m.name, '| trackId:', String(m.trackId)));
 
-    if (firstModule) {
-      let moduleProgress = trackProgress.modulesProgress.find(mp => mp.moduleId === firstModule._id);
-
-      if (!moduleProgress) {
-        moduleProgress = {
-          moduleId: firstModule._id,
-          status: 'unlocked',
-          lessonsProgress: [],
-          quizAttempts: [],
-          labAttempts: [],
-          startedAt: new Date()
-        };
-
-        trackProgress.modulesProgress.push(moduleProgress);
-        progress.currentModule = firstModule._id;
+    if (allModules && allModules.length > 0) {
+      for (const mod of allModules) {
+        const exists = trackProgress.modulesProgress.some(mp => String(mp.moduleId) === String(mod._id));
+        console.log('🚦 [startTrack] module', String(mod._id), 'exists in progress:', exists);
+        if (!exists) {
+          const moduleProgress = {
+            moduleId: mod._id,
+            status: 'unlocked',
+            lessonsProgress: [],
+            quizAttempts: [],
+            labAttempts: [],
+            startedAt: new Date()
+          };
+          trackProgress.modulesProgress.push(moduleProgress);
+          console.log('🟢 [startTrack] pushed moduleProgress for module:', String(mod._id));
+        }
       }
+      // Set the first module as current
+      progress.currentModule = allModules[0]._id;
+      console.log('🟢 [startTrack] progress.currentModule set to:', String(progress.currentModule));
+      console.log('🟢 [startTrack] modulesProgress now has', trackProgress.modulesProgress.length, 'items');
     }
 
     trackProgress.status = 'in_progress';
     progress.lastActivityAt = new Date();
 
+    console.log('🚦 [startTrack] saving progress...');
     await progress.save();
+    console.log('🟢 [startTrack] progress saved. tracksProgress count:', progress.tracksProgress.length);
+    // Print trackProgress snapshot
+    const savedTrackProgress = progress.tracksProgress.find(tp => String(tp.trackId) === String(track._id));
+    console.log('🟢 [startTrack] savedTrackProgress modules count:', savedTrackProgress ? savedTrackProgress.modulesProgress.length : 'N/A');
+
+    const modulesAdded = !!(savedTrackProgress && savedTrackProgress.modulesProgress && savedTrackProgress.modulesProgress.length > 0);
+    const modulesCount = modulesAdded ? savedTrackProgress.modulesProgress.length : 0;
+    // Set a response header so frontend clients can detect module population
+    res.setHeader('X-Modules-Added', modulesAdded ? 'true' : 'false');
 
     res.json({
       success: true,
       message: 'Track started successfully',
-      progress: trackProgress
+      progress: savedTrackProgress || trackProgress,
+      modulesAdded,
+      modulesCount
     });
 
   } catch (error) {
@@ -114,31 +141,96 @@ exports.startLesson = async (req, res) => {
   try {
     const { lessonId } = req.params;
     const userId = req.user.id;
+    console.log('🎓 START LESSON - lessonId:', lessonId, 'userId:', userId);
 
     const lesson = await Lesson.findOne({ _id: lessonId, status: 'active' });
+    console.log('🎓 START LESSON - Found lesson:', lesson ? lesson.name : 'NOT FOUND');
     if (!lesson) {
+      console.log('❌ START LESSON - Lesson not found');
       return res.status(404).json({ message: 'Lesson not found' });
     }
 
     const module = await Module.findById(lesson.moduleId);
+    console.log('🎓 START LESSON - Found module:', module ? module.name : 'NOT FOUND');
     if (!module) {
+      console.log('❌ START LESSON - Module not found');
       return res.status(404).json({ message: 'Module not found' });
     }
 
     let progress = await Progress.findOne({ userId });
+    console.log('🎓 START LESSON - Found progress:', progress ? 'YES' : 'NO');
     if (!progress) {
+      console.log('❌ START LESSON - No progress found, need to start track first');
       return res.status(400).json({ message: 'Please start the track first' });
     }
 
-    // Find track and module progress
-    let trackProgress = progress.tracksProgress.find(tp => tp.trackId === module.trackId);
+    // Find track and module progress (use string comparison)
+    console.log('🎓 START LESSON - progress.tracksProgress length:', progress.tracksProgress ? progress.tracksProgress.length : 0);
+    let trackProgress = progress.tracksProgress.find(tp => String(tp.trackId) === String(module.trackId));
+    console.log('🎓 START LESSON - Found track progress:', trackProgress ? 'YES' : 'NO');
+    if (trackProgress) {
+      try {
+        console.log('🎓 START LESSON - trackProgress.modulesProgress snapshot:', trackProgress.modulesProgress.map(mp => ({ moduleId: String(mp.moduleId), status: mp.status, lessonsCount: mp.lessonsProgress ? mp.lessonsProgress.length : 0 })));
+      } catch (e) {
+        console.log('🎓 START LESSON - error printing trackProgress snapshot', e.message);
+      }
+    }
     if (!trackProgress) {
+      console.log('❌ START LESSON - No track progress, need to start track first');
       return res.status(400).json({ message: 'Please start the track first' });
     }
 
-    let moduleProgress = trackProgress.modulesProgress.find(mp => mp.moduleId === module._id);
+    let moduleProgress = trackProgress.modulesProgress.find(mp => String(mp.moduleId) === String(module._id));
+    console.log('🎓 START LESSON - Found module progress:', moduleProgress ? 'YES' : 'NO');
+    if (moduleProgress) {
+      try {
+        console.log('🎓 START LESSON - moduleProgress snapshot:', { moduleId: String(moduleProgress.moduleId), status: moduleProgress.status, lessonsProgress: moduleProgress.lessonsProgress.map(lp => ({ lessonId: String(lp.lessonId), status: lp.status })) });
+      } catch (e) {
+        console.log('🎓 START LESSON - error printing moduleProgress snapshot', e.message);
+      }
+    }
     if (!moduleProgress) {
-      return res.status(400).json({ message: 'Module not unlocked' });
+      console.log('❌ START LESSON - Module not unlocked on first check, attempting retries...');
+      let found = false;
+      const maxRetries = 5;
+      const delay = ms => new Promise(res => setTimeout(res, ms));
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          await delay(150 * attempt); // backoff: 150ms, 300ms, 450ms...
+          const refreshedProgress = await Progress.findOne({ userId });
+          const refreshedTP = refreshedProgress && refreshedProgress.tracksProgress && refreshedProgress.tracksProgress.find(tp => String(tp.trackId) === String(module.trackId));
+          const refreshedMP = refreshedTP && refreshedTP.modulesProgress && refreshedTP.modulesProgress.find(mp => String(mp.moduleId) === String(module._id));
+          console.log(`🎓 START LESSON - retry ${attempt}/${maxRetries}: found moduleProgress:`, !!refreshedMP);
+          if (refreshedMP) {
+            moduleProgress = refreshedMP;
+            trackProgress = refreshedTP;
+            found = true;
+            break;
+          }
+        } catch (e) {
+          console.log('🎓 START LESSON - retry error:', e.message);
+        }
+      }
+      if (!found) {
+        console.log('🎓 START LESSON - Module still not unlocked after retries, creating moduleProgress on-demand');
+        // Create moduleProgress on-demand to be resilient to races / missing population
+        try {
+          const newModuleProgress = {
+            moduleId: module._id,
+            status: 'unlocked',
+            lessonsProgress: [],
+            quizAttempts: [],
+            labAttempts: [],
+            startedAt: new Date()
+          };
+          trackProgress.modulesProgress.push(newModuleProgress);
+          moduleProgress = newModuleProgress;
+          console.log('🎓 START LESSON - on-demand moduleProgress created for module:', String(module._id));
+        } catch (e) {
+          console.log('🎓 START LESSON - error creating on-demand moduleProgress:', e.message);
+          return res.status(400).json({ message: 'Module not unlocked' });
+        }
+      }
     }
 
     // Check if lesson is already started
@@ -167,6 +259,7 @@ exports.startLesson = async (req, res) => {
       };
 
       moduleProgress.lessonsProgress.push(lessonProgress);
+      console.log('🎓 START LESSON - Pushed lessonProgress:', { lessonId: String(lessonProgress.lessonId), status: lessonProgress.status });
     } else {
       lessonProgress.status = 'in_progress';
     }
@@ -177,7 +270,24 @@ exports.startLesson = async (req, res) => {
     trackProgress.status = 'in_progress';
     progress.lastActivityAt = new Date();
 
+      // Debug snapshot before save
+      try {
+        console.log('🎓 START LESSON - pre-save moduleProgress snapshot:', { moduleId: String(moduleProgress.moduleId), status: moduleProgress.status, lessonsProgressCount: moduleProgress.lessonsProgress.length });
+        console.log('🎓 START LESSON - pre-save trackProgress modules count:', trackProgress.modulesProgress.length);
+      } catch (e) {
+        console.log('🎓 START LESSON - error preparing pre-save snapshot:', e.message);
+      }
+
     await progress.save();
+
+      // Debug after save
+      try {
+        const refreshed = await Progress.findOne({ userId });
+        const savedTP = refreshed.tracksProgress.find(tp => String(tp.trackId) === String(module.trackId));
+        console.log('🎓 START LESSON - post-save savedTP modules snapshot:', savedTP ? savedTP.modulesProgress.map(mp => ({ moduleId: String(mp.moduleId), status: mp.status })) : 'N/A');
+      } catch (e) {
+        console.log('🎓 START LESSON - error fetching post-save snapshot:', e.message);
+      }
 
     res.json({
       success: true,

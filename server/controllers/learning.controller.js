@@ -9,10 +9,13 @@ const Progress = require('../models/progress.model');
 // Get all tracks
 exports.getTracks = async (req, res) => {
   try {
+    console.log('🎯 GET TRACKS - Starting...')
     const tracks = await Track.find({ status: 'active' }).sort({ order: 1 });
+    console.log('🎯 GET TRACKS - Found tracks:', tracks.length)
+    console.log('🎯 GET TRACKS - Tracks data:', tracks)
     res.json(tracks);
   } catch (error) {
-    console.error('Error fetching tracks:', error);
+    console.error('❌ GET TRACKS - Error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
@@ -21,29 +24,37 @@ exports.getTracks = async (req, res) => {
 exports.getTrackById = async (req, res) => {
   try {
     const { trackId } = req.params;
+    console.log('🎯 GET TRACK BY ID - trackId:', trackId)
 
     const track = await Track.findOne({ _id: trackId, status: 'active' });
+    console.log('🎯 GET TRACK BY ID - Found track:', track)
 
     if (!track) {
+      console.log('❌ GET TRACK BY ID - Track not found')
       return res.status(404).json({ message: 'Track not found' });
     }
 
     // Get modules for this track
-    const modules = await Module.find({ trackId: track.trackId, status: 'active' }).sort({ order: 1 });
+    const modules = await Module.find({ trackId: track._id, status: 'active' }).sort({ order: 1 });
+    console.log('🎯 GET TRACK BY ID - Found modules:', modules.length)
+    console.log('🎯 GET TRACK BY ID - Modules data:', modules)
 
     // Get user progress if authenticated
     let progress = null;
     if (req.user) {
       progress = await Progress.findOne({ userId: req.user._id });
+      console.log('🎯 GET TRACK BY ID - User progress:', progress)
     }
 
-    res.json({
+    const response = {
       track,
       modules,
-      progress: progress ? progress.tracksProgress.find(tp => tp.trackId === track.trackId) : null
-    });
+      progress: progress ? progress.tracksProgress.find(tp => tp.trackId === track._id) : null
+    }
+    console.log('🎯 GET TRACK BY ID - Sending response:', response)
+    res.json(response);
   } catch (error) {
-    console.error('Error fetching track:', error);
+    console.error('❌ GET TRACK BY ID - Error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
@@ -158,8 +169,32 @@ exports.getLessonById = async (req, res) => {
       return res.status(404).json({ message: 'Lesson not found' });
     }
 
-    // Get content for this lesson
-    const content = await Content.find({ lessonId: lesson._id, status: 'active' }).sort({ order: 1 });
+      // Get content for this lesson
+      // Content documents may reference the lesson by either the ObjectId (_id), the external lessonId string (lesson.lessonId),
+      // or the lesson may list content items by external contentId values in lesson.contentItems.
+      const contentQueryOr = [];
+      contentQueryOr.push({ lessonId: lesson._id });
+      if (lesson.lessonId) contentQueryOr.push({ lessonId: lesson.lessonId });
+      if (Array.isArray(lesson.contentItems) && lesson.contentItems.length > 0) {
+        // Match on Content.contentId (external id from collections) or on _id if the array contains ObjectId-like strings
+        contentQueryOr.push({ contentId: { $in: lesson.contentItems } });
+        // attempt to match any items that look like ObjectId strings
+        const possibleObjectIds = lesson.contentItems.filter(ci => /^[0-9a-fA-F]{24}$/.test(ci));
+        if (possibleObjectIds.length > 0) {
+          contentQueryOr.push({ _id: { $in: possibleObjectIds } });
+        }
+      }
+
+      const content = await Content.find({
+        $and: [
+          { $or: contentQueryOr },
+          { status: 'active' }
+        ]
+      }).sort({ order: 1 });
+
+      console.log('🎯 GET LESSON BY ID - lesson._id:', String(lesson._id), 'lesson.lessonId:', lesson.lessonId);
+      console.log('🎯 GET LESSON BY ID - content items matched:', content.length);
+      content.forEach(c => console.log('   - content:', String(c._id), 'contentId:', c.contentId, 'url:', c.url));
 
     // Get user progress if authenticated
     let lessonProgress = null;
@@ -172,7 +207,7 @@ exports.getLessonById = async (req, res) => {
           if (trackProgress) {
             const moduleProgress = trackProgress.modulesProgress.find(mp => mp.moduleId === lesson.moduleId);
             if (moduleProgress) {
-              lessonProgress = moduleProgress.lessonsProgress.find(lp => lp.lessonId === lesson._id);
+                lessonProgress = moduleProgress.lessonsProgress.find(lp => String(lp.lessonId) === String(lesson._id) || String(lp.lessonId) === String(lesson.lessonId));
             }
           }
         }
