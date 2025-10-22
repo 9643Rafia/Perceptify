@@ -150,6 +150,23 @@ const LessonPlayer = () => {
     });
 
     switch (currentContent.type) {
+      case 'quiz':
+        return (
+          <div className="lms-content-box">
+            <h3>{currentContent.title}</h3>
+            <p>{currentContent.description}</p>
+            {currentContent.quizId ? (
+              <div className="mt-3">
+                <Button variant="primary" onClick={() => navigate(`/quiz/${currentContent.quizId}`)}>
+                  Start Quiz
+                </Button>
+              </div>
+            ) : (
+              <Alert variant="warning">Quiz metadata missing (quizId).</Alert>
+            )}
+          </div>
+        );
+
       case 'video':
         console.log('🎬 LessonPlayer: Rendering video with URL:', currentContent.url);
         return (
@@ -383,23 +400,30 @@ const LessonPlayer = () => {
                 <h6 className="mb-3">Lesson Content</h6>
                 <div className="list-group list-group-flush">
                   {content.map((item, index) => (
-                    <div
-                      key={item._id}
-                      className={`list-group-item list-group-item-action ${
-                        index === currentContentIndex ? 'active' : ''
-                      } ${completedItems.includes(item._id) ? 'list-group-item-success' : ''}`}
-                      style={{ cursor: 'pointer', fontSize: '0.875rem' }}
-                      onClick={() => setCurrentContentIndex(index)}
-                    >
-                      <div className="d-flex align-items-center">
-                        <span className="me-2">{index + 1}.</span>
-                        <span className="flex-grow-1">{item.title}</span>
-                        {completedItems.includes(item._id) && (
-                          <FaCheck className="text-success" size={12} />
-                        )}
+                      <div
+                        key={item._id}
+                        className={`list-group-item list-group-item-action ${
+                          index === currentContentIndex ? 'active' : ''
+                        } ${completedItems.includes(item._id) ? 'list-group-item-success' : ''}`}
+                        style={{ cursor: 'pointer', fontSize: '0.875rem' }}
+                        onClick={() => {
+                          // If this content item is a quiz, open the quiz route directly
+                          if (item.type === 'quiz' && item.quizId) {
+                            navigate(`/quiz/${item.quizId}`);
+                            return;
+                          }
+                          setCurrentContentIndex(index);
+                        }}
+                      >
+                        <div className="d-flex align-items-center">
+                          <span className="me-2">{index + 1}.</span>
+                          <span className="flex-grow-1">{item.title}</span>
+                          {completedItems.includes(item._id) && (
+                            <FaCheck className="text-success" size={12} />
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
                 </div>
 
                 <hr />

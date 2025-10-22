@@ -2,6 +2,7 @@ const Track = require('../models/track.model');
 const Module = require('../models/module.model');
 const Lesson = require('../models/lesson.model');
 const Content = require('../models/content.model');
+const Quiz = require('../models/quiz.model');
 const Progress = require('../models/progress.model');
 
 // ========== TRACK CONTROLLERS ==========
@@ -220,7 +221,22 @@ exports.getLessonById = async (req, res) => {
 
       console.log('🎯 GET LESSON BY ID - lesson._id:', String(lesson._id), 'lesson.lessonId:', lesson.lessonId);
       console.log('🎯 GET LESSON BY ID - content items matched:', content.length);
-      content.forEach(c => console.log('   - content:', String(c._id), 'contentId:', c.contentId, 'url:', c.url));
+      // Log detailed info for each content item including quizId presence and whether the quiz exists
+      for (const c of content) {
+        try {
+          console.log('   - content:', String(c._id), 'contentId:', c.contentId, 'type:', c.type, 'quizId:', c.quizId, 'url:', c.url);
+          if (c.type === 'quiz') {
+            if (c.quizId) {
+              const quizExists = await Quiz.exists({ quizId: String(c.quizId) });
+              console.log(`       -> quizId present: ${c.quizId} | quizExists: ${quizExists ? 'yes' : 'no'}`);
+            } else {
+              console.log('       -> quizId MISSING for this content item');
+            }
+          }
+        } catch (logErr) {
+          console.warn('       -> error checking quiz existence for content', c.contentId || c._id, logErr.message || logErr);
+        }
+      }
 
     // Get user progress if authenticated
     let lessonProgress = null;
