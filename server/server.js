@@ -1,4 +1,5 @@
 const express = require("express")
+const path = require("path")
 const cors = require("cors")
 const morgan = require("morgan")
 const connectDB = require("./config/db")
@@ -26,6 +27,19 @@ const app = express()
 app.use(cors())
 app.use(express.json())
 app.use(morgan("dev"))
+
+// Debug middleware - log all requests
+app.use((req, res, next) => {
+  console.log(`🌐 ${new Date().toISOString()} - ${req.method} ${req.url}`)
+  console.log('📋 Headers:', req.headers)
+  if (req.body && Object.keys(req.body).length > 0) {
+    console.log('📦 Body:', req.body)
+  }
+  next()
+})
+
+// Serve static files from public directory
+app.use(express.static(path.join(__dirname, '../public')))
 
 // Routes
 app.use("/api/auth", authRoutes)

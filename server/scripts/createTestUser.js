@@ -26,13 +26,13 @@ const createTestUser = async () => {
     await connectDB();
 
     // Check if user already exists
-    const existingUser = await User.findOne({ email: 'test@perceptify.com' });
+    const existingUser = await User.findOne({ email: 'sohaibmayo12@gmail.com' });
 
     if (existingUser) {
       console.log('⚠️  Test user already exists!');
       console.log('\nTest User Credentials:');
-      console.log('Email: test@perceptify.com');
-      console.log('Password: password123');
+      console.log('Email: sohaibmayo12@gmail.com');
+      console.log('Password: Test@123');
       console.log('Role: Learner');
       console.log('Status: active\n');
       process.exit(0);
@@ -41,8 +41,8 @@ const createTestUser = async () => {
     // Create new test user
     const testUser = new User({
       fullName: 'Test Learner',
-      email: 'test@perceptify.com',
-      password: 'password123', // Will be hashed by pre-save hook
+      email: 'sohaibmayo12@gmail.com',
+      password: 'Test@123', // Will be hashed by pre-save hook
       age: 25,
       role: 'Learner',
       status: 'active'
@@ -53,8 +53,8 @@ const createTestUser = async () => {
     console.log('✅ Test user created successfully!\n');
     console.log('Test User Credentials:');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('Email: test@perceptify.com');
-    console.log('Password: password123');
+    console.log('Email: sohaibmayo12@gmail.com');
+    console.log('Password: Test@123');
     console.log('Role: Learner');
     console.log('Status: active');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');

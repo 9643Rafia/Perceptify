@@ -64,6 +64,11 @@ const contentSchema = new mongoose.Schema({
     type: String,
     default: null
   },
+  quizId: {
+    type: String,
+    default: null,
+    index: true
+  },
   thumbnailUrl: {
     type: String,
     default: null

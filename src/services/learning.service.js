@@ -3,7 +3,9 @@ import api from './api';
 class LearningService {
   // ========== TRACKS ==========
   async getAllTracks() {
+    console.log('🔍 LearningService: Calling getAllTracks API...');
     const response = await api.get('/learning/tracks');
+    console.log('🔍 LearningService: getAllTracks response:', response.data);
     return response.data;
   }
 
@@ -81,7 +83,8 @@ class LearningService {
 
   async startTrack(trackId) {
     const response = await api.post(`/progress/tracks/${trackId}/start`);
-    return response.data;
+    // Return full axios response so callers can inspect headers and flags
+    return response;
   }
 
   async startLesson(lessonId) {
@@ -94,10 +97,11 @@ class LearningService {
     return response.data;
   }
 
-  async completeLesson(lessonId, timeSpent) {
-    const response = await api.post(`/progress/lessons/${lessonId}/complete`, {
-      timeSpent
-    });
+  async completeLesson(lessonId, timeSpent, options = {}) {
+    const body = { timeSpent };
+    if (options.skipQuiz) body.skipQuiz = true;
+    if (options.forceModuleComplete) body.forceModuleComplete = true;
+    const response = await api.post(`/progress/lessons/${lessonId}/complete`, body);
     return response.data;
   }
 
@@ -136,4 +140,5 @@ class LearningService {
   }
 }
 
-export default new LearningService();
+const learningServiceInstance = new LearningService();
+export default learningServiceInstance;

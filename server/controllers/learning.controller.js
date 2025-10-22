@@ -2,6 +2,7 @@ const Track = require('../models/track.model');
 const Module = require('../models/module.model');
 const Lesson = require('../models/lesson.model');
 const Content = require('../models/content.model');
+const Quiz = require('../models/quiz.model');
 const Progress = require('../models/progress.model');
 
 // ========== TRACK CONTROLLERS ==========
@@ -9,10 +10,13 @@ const Progress = require('../models/progress.model');
 // Get all tracks
 exports.getTracks = async (req, res) => {
   try {
+    console.log('🎯 GET TRACKS - Starting...')
     const tracks = await Track.find({ status: 'active' }).sort({ order: 1 });
+    console.log('🎯 GET TRACKS - Found tracks:', tracks.length)
+    console.log('🎯 GET TRACKS - Tracks data:', tracks)
     res.json(tracks);
   } catch (error) {
-    console.error('Error fetching tracks:', error);
+    console.error('❌ GET TRACKS - Error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
@@ -21,29 +25,37 @@ exports.getTracks = async (req, res) => {
 exports.getTrackById = async (req, res) => {
   try {
     const { trackId } = req.params;
+    console.log('🎯 GET TRACK BY ID - trackId:', trackId)
 
     const track = await Track.findOne({ _id: trackId, status: 'active' });
+    console.log('🎯 GET TRACK BY ID - Found track:', track)
 
     if (!track) {
+      console.log('❌ GET TRACK BY ID - Track not found')
       return res.status(404).json({ message: 'Track not found' });
     }
 
     // Get modules for this track
-    const modules = await Module.find({ trackId: track.trackId, status: 'active' }).sort({ order: 1 });
+    const modules = await Module.find({ trackId: track._id, status: 'active' }).sort({ order: 1 });
+    console.log('🎯 GET TRACK BY ID - Found modules:', modules.length)
+    console.log('🎯 GET TRACK BY ID - Modules data:', modules)
 
     // Get user progress if authenticated
     let progress = null;
     if (req.user) {
       progress = await Progress.findOne({ userId: req.user._id });
+      console.log('🎯 GET TRACK BY ID - User progress:', progress)
     }
 
-    res.json({
+    const response = {
       track,
       modules,
-      progress: progress ? progress.tracksProgress.find(tp => tp.trackId === track.trackId) : null
-    });
+      progress: progress ? progress.tracksProgress.find(tp => tp.trackId === track._id) : null
+    }
+    console.log('🎯 GET TRACK BY ID - Sending response:', response)
+    res.json(response);
   } catch (error) {
-    console.error('Error fetching track:', error);
+    console.error('❌ GET TRACK BY ID - Error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
@@ -158,8 +170,73 @@ exports.getLessonById = async (req, res) => {
       return res.status(404).json({ message: 'Lesson not found' });
     }
 
-    // Get content for this lesson
-    const content = await Content.find({ lessonId: lesson._id, status: 'active' }).sort({ order: 1 });
+      // Get content for this lesson
+      // Content documents in the collections may reference the lesson using different id formats:
+      // - the Lesson._id (ObjectId as string)
+      // - the Lesson.lessonId (external id like 'LES-1.1.1')
+      // - legacy/normalized ids used in collections (e.g. 'lesson_1.1.1')
+      // or the lesson may list content items by external contentId values in lesson.contentItems.
+      const contentQueryOr = [];
+
+      // Build a list of possible lesson id values to match against Content.lessonId (which is stored as String)
+      const possibleLessonIds = [];
+      possibleLessonIds.push(String(lesson._id));
+      if (lesson.lessonId) {
+        possibleLessonIds.push(String(lesson.lessonId));
+
+        // normalized variant: convert 'LES-1.1.1' -> 'lesson_1.1.1' (lowercase, replace prefix and dashes)
+        const normalized = String(lesson.lessonId).toLowerCase().replace(/^les[-_]/, 'lesson_').replace(/-/g, '_');
+        if (!possibleLessonIds.includes(normalized)) {
+          possibleLessonIds.push(normalized);
+        }
+      }
+
+      // Add a single $or clause that matches any of the possible lessonId strings
+      if (possibleLessonIds.length > 0) {
+        contentQueryOr.push({ lessonId: { $in: possibleLessonIds } });
+      }
+
+      // Also match explicit contentItems references by contentId or by _id if they look like ObjectId strings
+      if (Array.isArray(lesson.contentItems) && lesson.contentItems.length > 0) {
+        contentQueryOr.push({ contentId: { $in: lesson.contentItems } });
+        const possibleObjectIds = lesson.contentItems.filter(ci => /^[0-9a-fA-F]{24}$/.test(ci));
+        if (possibleObjectIds.length > 0) {
+          contentQueryOr.push({ _id: { $in: possibleObjectIds } });
+        }
+      }
+
+      // Diagnostic: build the actual query object and log it so we can see what the running server is searching for
+      const queryObj = {
+        $and: [
+          { $or: contentQueryOr },
+          { status: 'active' }
+        ]
+      };
+
+      console.log('🔍 GET LESSON BY ID - possibleLessonIds:', possibleLessonIds);
+      console.log('🔍 GET LESSON BY ID - contentQueryOr:', JSON.stringify(contentQueryOr));
+      console.log('🔍 GET LESSON BY ID - queryObj:', JSON.stringify(queryObj));
+
+      const content = await Content.find(queryObj).sort({ order: 1 });
+
+      console.log('🎯 GET LESSON BY ID - lesson._id:', String(lesson._id), 'lesson.lessonId:', lesson.lessonId);
+      console.log('🎯 GET LESSON BY ID - content items matched:', content.length);
+      // Log detailed info for each content item including quizId presence and whether the quiz exists
+      for (const c of content) {
+        try {
+          console.log('   - content:', String(c._id), 'contentId:', c.contentId, 'type:', c.type, 'quizId:', c.quizId, 'url:', c.url);
+          if (c.type === 'quiz') {
+            if (c.quizId) {
+              const quizExists = await Quiz.exists({ quizId: String(c.quizId) });
+              console.log(`       -> quizId present: ${c.quizId} | quizExists: ${quizExists ? 'yes' : 'no'}`);
+            } else {
+              console.log('       -> quizId MISSING for this content item');
+            }
+          }
+        } catch (logErr) {
+          console.warn('       -> error checking quiz existence for content', c.contentId || c._id, logErr.message || logErr);
+        }
+      }
 
     // Get user progress if authenticated
     let lessonProgress = null;
@@ -172,7 +249,7 @@ exports.getLessonById = async (req, res) => {
           if (trackProgress) {
             const moduleProgress = trackProgress.modulesProgress.find(mp => mp.moduleId === lesson.moduleId);
             if (moduleProgress) {
-              lessonProgress = moduleProgress.lessonsProgress.find(lp => lp.lessonId === lesson._id);
+                lessonProgress = moduleProgress.lessonsProgress.find(lp => String(lp.lessonId) === String(lesson._id) || String(lp.lessonId) === String(lesson.lessonId));
             }
           }
         }
