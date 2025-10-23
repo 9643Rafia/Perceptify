@@ -3,6 +3,8 @@ import { Container, Row, Col, Card, Button, ProgressBar, Badge, Alert } from 're
 import { useNavigate } from 'react-router-dom';
 import { FaTrophy, FaFire, FaStar, FaClock, FaAward } from 'react-icons/fa';
 import LearningAPI from '../services/learning.api';
+import DashboardAPI from '../services/dashboard.service';
+import BadgesAPI from '../services/badges.service';
 import ProgressAPI from '../services/progress.api';
 
 const LearningDashboard = () => {
@@ -23,24 +25,45 @@ const LearningDashboard = () => {
       setLoading(true);
       console.log('📊 LearningDashboard: Starting to fetch data...');
 
-      const [tracksData, progressData, statsData, badgesData] = await Promise.all([
-        LearningAPI.getAllTracks(),
-        ProgressAPI.getUserProgress(),
-        ProgressAPI.getDashboardStats(),
-        ProgressAPI.getUserBadges()
-      ]);
 
-      console.log('📊 LearningDashboard: Data received:', {
-        tracksData,
-        progressData,
-        statsData,
-        badgesData
-      });
+      // Fetch tracks, dashboard stats and badges. User-specific progress is not
+      // available via /progress/me in the current backend routing, so we
+      // retrieve the next learning item instead (if authenticated) and use it
+      // to populate a minimal progress object for the "Continue" card.
+      const tracksData = await LearningAPI.getAllTracks();
+      let statsData = null;
+      let badgesData = null;
+      let nextContent = null;
+
+      try {
+        statsData = await DashboardAPI.getDashboardStats();
+      } catch (e) {
+        console.warn('dashboard stats not available', e.message || e);
+      }
+
+      try {
+        badgesData = await BadgesAPI.getUserBadges();
+      } catch (e) {
+        console.warn('badges not available', e.message || e);
+      }
+
+      try {
+        nextContent = await LearningAPI.getNextContent();
+      } catch (e) {
+        // nextContent requires authentication; ignore if unavailable
+        console.warn('next content not available', e.message || e);
+      }
+
+      console.log('📊 LearningDashboard: Data received:', { tracksData, statsData, badgesData, nextContent });
 
       setTracks(tracksData);
-      setProgress(progressData);
       setStats(statsData);
       setBadges(badgesData);
+      if (nextContent && nextContent.type === 'lesson') {
+        setProgress({ currentLesson: nextContent.lesson._id });
+      } else {
+        setProgress(null);
+      }
 
       console.log('📊 LearningDashboard: State updated, tracks count:', tracksData?.length);
     } catch (err) {
@@ -53,14 +76,9 @@ const LearningDashboard = () => {
 
   const handleStartTrack = async (trackId) => {
     try {
-      const response = await ProgressAPI.startTrack(trackId);
-      // Some server responses include a flag/modulesCount to indicate modules were populated
-      const modulesAdded = response?.data?.modulesAdded || response?.headers?.['x-modules-added'] === 'true';
-      if (modulesAdded) {
-        // Re-fetch progress to ensure UI has the latest modulesProgress
-        const refreshedProgress = await ProgressAPI.getUserProgress();
-        setProgress(refreshedProgress);
-      }
+      await ProgressAPI.startTrack(trackId);
+      // If server populated modules, just navigate to the course page which will
+      // fetch module progress when available.
       navigate(`/course/${trackId}`);
     } catch (err) {
       setError('Failed to start track: ' + err.response?.data?.message);

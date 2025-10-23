@@ -4,7 +4,7 @@ require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
 const Progress = require('../models/progress.model');
 
-const USER_ID = '68f7fe92d2c86928cdc101b5'; // sohaibmayo12@gmail.com
+const USER_ID = '68fa250144c38947040a8dba'; // sohaibmayo12@gmail.com
 
 const connectDB = async () => {
   try {

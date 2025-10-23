@@ -3,7 +3,7 @@ import { Container, Row, Col, Card, Button, Badge, Alert, ListGroup } from 'reac
 import { useParams, useNavigate } from 'react-router-dom';
 import { FaLock, FaCheck, FaClock, FaPlay, FaClipboardCheck } from 'react-icons/fa';
 import LearningAPI from '../services/learning.api';
-import ProgressAPI from '../services/progress.api';
+import LessonProgressAPI from '../services/lessonProgress.service';
 
 const ModuleView = () => {
   const { moduleId } = useParams();
@@ -54,7 +54,7 @@ const ModuleView = () => {
     const unlocked = isLessonUnlocked(lesson);
     if (unlocked) {
       try {
-        await ProgressAPI.startLesson(lesson._id);
+        await LessonProgressAPI.startLesson(lesson._id);
         navigate(`/lesson/${lesson._id}`);
       } catch (err) {
         setError('Failed to start lesson: ' + err.response?.data?.message);

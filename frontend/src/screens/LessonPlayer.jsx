@@ -3,7 +3,7 @@ import { Container, Row, Col, Card, Button, Alert } from 'react-bootstrap';
 import { useParams, useNavigate } from 'react-router-dom';
 import { FaArrowLeft, FaArrowRight, FaCheck } from 'react-icons/fa';
 import LearningAPI from '../services/learning.api';
-import ProgressAPI from '../services/progress.api';
+import LessonProgressAPI from '../services/lessonProgress.service';
 import QuizzesAPI from '../services/quizzes.api';
 
 const LessonPlayer = () => {
@@ -182,7 +182,7 @@ useEffect(() => {
     if (!lesson || timeSpentRef.current === 0) return;
     try {
       setSaving(true);
-      await ProgressAPI.updateLessonProgress(lessonId, {
+      await LessonProgressAPI.updateLessonProgress(lessonId, {
         timeSpent: timeSpentRef.current,
         lastPosition: currentContentIndex,
         completedContentItems: completedItems,
@@ -276,7 +276,7 @@ useEffect(() => {
 
       // Request server to skip quiz/module-level requirements when completing
   // By default do not skip quizzes — let the backend enforce quiz requirements.
-  const result = await ProgressAPI.completeLesson(lessonId, timeSpent);
+  const result = await LessonProgressAPI.completeLesson(lessonId, timeSpent);
 
       if (result.xpEarned) {
         alert(`Lesson completed! You earned ${result.xpEarned} XP!${result.leveledUp ? ' Level Up!' : ''}`);
