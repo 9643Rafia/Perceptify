@@ -8,7 +8,7 @@ import api from "../services/api"
 
 const InitialAssessmentQuiz = () => {
   const navigate = useNavigate()
-  const { user, isAuthenticated } = useAuth()
+  const { user } = useAuth()
 
   const [currentStep, setCurrentStep] = useState(1)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -70,7 +70,7 @@ const InitialAssessmentQuiz = () => {
     switch (currentStep) {
       case 1:
         return formData.name.trim() !== "" && formData.email.trim() !== "" &&
-               /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/.test(formData.email)
+        /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)
       case 2:
         return formData.heardAboutDeepfakes !== ""
       case 3:

@@ -1,5 +1,5 @@
 "use client"
-import { useState, useEffect, useRef } from "react"
+import { useState, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { FiCheck, FiX, FiArrowRight, FiZoomIn, FiInfo, FiAward, FiBarChart2 } from "react-icons/fi"
 import confetti from "canvas-confetti"
@@ -165,7 +165,7 @@ const DeepfakeDetectionDemo = () => {
                     <div className="image-wrapper">
                       <img
                         src={challenges[currentChallenge].imageA || "/placeholder.svg"}
-                        alt="Image A"
+                        alt="Portrait A - option A"
                         className={zoomedImage === "A" ? "zoomed" : ""}
                       />
                       <button className="zoom-button" onClick={() => handleZoomImage("A")}>
@@ -203,7 +203,7 @@ const DeepfakeDetectionDemo = () => {
                     <div className="image-wrapper">
                       <img
                         src={challenges[currentChallenge].imageB || "/placeholder.svg"}
-                        alt="Image B"
+                        alt="Portrait B - option B"
                         className={zoomedImage === "B" ? "zoomed" : ""}
                       />
                       <button className="zoom-button" onClick={() => handleZoomImage("B")}>

@@ -19,11 +19,15 @@ import "aos/dist/aos.css"
 
 const ForEducators = () => {
   useEffect(() => {
-    AOS.init({
-      duration: 800,
-      once: false,
-      mirror: false,
-    })
+    let mounted = true
+    if (mounted) {
+      AOS.init({
+        duration: 800,
+        once: false,
+        mirror: false,
+      })
+    }
+    return () => { mounted = false }
   }, [])
 
   // Pricing table data
@@ -351,7 +355,7 @@ const ForEducators = () => {
                   </div>
                   <FiArrowRight className="method-arrow" />
                 </a>
-                <a href="#" className="contact-method">
+                <button type="button" className="contact-method btn-link" onClick={() => window.location.hash = '#contact'}>
                   <div className="method-icon">
                     <FiFileText />
                   </div>
@@ -360,7 +364,7 @@ const ForEducators = () => {
                     <p>Fill out our detailed requirements form</p>
                   </div>
                   <FiArrowRight className="method-arrow" />
-                </a>
+                </button>
               </div>
             </div>
             <div className="contact-form-container" data-aos="fade-left">

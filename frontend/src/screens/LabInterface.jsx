@@ -177,7 +177,7 @@ const LabInterface = () => {
 
         <div className="mt-4">
           <h5>Challenge Results</h5>
-          {lab.challenges.map((challenge, index) => {
+                {lab.challenges.map((challenge, _index) => {
             const result = results.responses.find(r => r.challengeId === challenge.challengeId);
             const userResponse = responses.find(r => r.challengeId === challenge.challengeId);
 
