@@ -1,0 +1,25 @@
+{
+  "name": "perceptify-backend",
+  "version": "0.1.0",
+  "private": true,
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon --config nodemon.json server.js",
+    "seed:forum": "node scripts/seedForumData.js",
+    "update:videos": "node scripts/updateVideoUrls.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.5.0",
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.14.3",
+    "morgan": "^1.10.0",
+    "nodemailer": "^7.0.3",
+    "bcryptjs": "^3.0.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  }
+}
