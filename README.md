@@ -58,3 +58,9 @@ cd ./frontend && npm run start
 cd ./backend && npm run dev (for development)
 
 cd ./backend && npm run start (for production)
+
+GOALS:
+Fix Mini Quiz Issue.
+Make sure we have videos being properly provided from the backend
+Make sure the Timer is stored in the database when refreshed/etc
+Make sure the lesson is marked as complete we get a toaster notification + next lesson is unlocked the lesson just done is marked done as well

@@ -15,7 +15,7 @@ const quizRoutes = require("./routes/quiz.routes")
 const progressRoutes = require("./routes/progress.routes")
 const adminRoutes = require("./routes/admin.routes")
 const forumRoutes = require("./routes/forum.routes")
-
+const mediaRoutes = require('./routes/media.routes')
 
 // Connect to database
 connectDB()
@@ -50,6 +50,7 @@ app.use('/api/quizzes', quizRoutes)
 app.use('/api/progress', progressRoutes)
 app.use('/api/admin', adminRoutes)
 app.use('/api/forum', forumRoutes)
+app.use('/media', mediaRoutes)
 
 
 // Error handling middleware
