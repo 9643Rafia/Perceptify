@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Container, Row, Col, Card, Button, Alert } from 'react-bootstrap';
 import { useParams, useNavigate } from 'react-router-dom';
 import { FaArrowLeft, FaArrowRight, FaCheck } from 'react-icons/fa';
@@ -27,39 +27,7 @@ const LessonPlayer = () => {
   const [videoFallbackAttempted, setVideoFallbackAttempted] = useState(false);
   const timeDisplayRef = useRef(null);
 
-  const fetchLessonData = useCallback(async () => {
-    try {
-      setLoading(true);
-      console.log('🎥 LessonPlayer: Fetching lesson data for lessonId:', lessonId);
-
-  const data = await LearningAPI.getLessonById(lessonId);
-      console.log('🎥 LessonPlayer: Lesson data received:', data);
-
-  setLesson(data.lesson);
-  // Restore all content items including quizzes so lessons can show inline mini-quizzes
-  setContent(data.content || []);
-
-      console.log('🎥 LessonPlayer: Content items:', data.content);
-      data.content.forEach((item, index) => {
-        console.log(`🎥 Content ${index + 1}:`, {
-          title: item.title,
-          type: item.type,
-          url: item.url
-        });
-      });
-
-      if (data.progress) {
-        setTimeSpent(data.progress.timeSpent || 0);
-        timeSpentRef.current = data.progress.timeSpent || 0;
-        setCompletedItems(data.progress.completedContentItems || []);
-      }
-    } catch (err) {
-      setError('Failed to load lesson');
-      console.error('❌ LessonPlayer: Error fetching lesson:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [lessonId]);
+  // --- removed older fetchLessonData and timer/auto-save to replace with drop-in below ---
 
   // Minimal inline mini-quiz component (renders inside lesson content)
   const MiniQuiz = ({ content, onComplete }) => {
@@ -165,6 +133,7 @@ const LessonPlayer = () => {
     );
   };
 
+// --- Load Lesson Data ---
 useEffect(() => {
   let mounted = true;
 
@@ -203,9 +172,10 @@ useEffect(() => {
       try { URL.revokeObjectURL(videoFallbackUrl); } catch (e) {}
     }
   };
-}, [lessonId]); // ✅ Only re-run if lessonId changes
+}, [lessonId, videoFallbackUrl]); // ✅ Only re-run if lessonId or fallback changes
 
 
+// --- Timer + Auto-Save Logic ---
 // Keep a fresh copy of auto-save function (refs avoid re-renders)
 useEffect(() => {
   autoSaveRef.current = async () => {
@@ -235,6 +205,19 @@ useEffect(() => {
     }, 1000);
   }
 
+  // 2️⃣ Update visible time every 5s directly via DOM (no React state updates)
+  const syncInterval = setInterval(() => {
+    try {
+      const secs = timeSpentRef.current;
+      const mins = Math.floor(secs / 60);
+      const formatted = `${mins}:${(secs % 60).toString().padStart(2, '0')}`;
+      if (timeDisplayRef.current) timeDisplayRef.current.textContent = formatted;
+    } catch (e) {
+      // swallow any rare errors
+      console.warn('Time display update failed', e.message || e);
+    }
+  }, 1000);
+
   // 3️⃣ Auto-save progress every 30s using the latest ref
   if (!saveIntervalRef.current) {
     saveIntervalRef.current = setInterval(() => {
@@ -252,8 +235,12 @@ useEffect(() => {
       clearInterval(saveIntervalRef.current);
       saveIntervalRef.current = null;
     }
+    clearInterval(syncInterval);
   };
-}, [lesson]);
+}, [lesson]); // ✅ Run once per lesson load
+
+// (Ref-based time display is used above to avoid re-renders; a React.memo TimeDisplay
+// can be added later if you prefer React-driven updates.)
 
 
 
@@ -490,7 +477,7 @@ useEffect(() => {
           <Col xs="auto">
             <div className="text-end">
               <small className="text-muted d-block">Time Spent</small>
-              <strong className="fs-5">{formatTime(timeSpent)}</strong>
+              <strong ref={timeDisplayRef} className="fs-5">{formatTime(timeSpentRef.current || 0)}</strong>
             </div>
           </Col>
         </Row>
