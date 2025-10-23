@@ -27,7 +27,7 @@ const connectDB = async () => {
 // Read JSON file helper
 const readJSONFile = (filename) => {
   try {
-    const filePath = path.join(__dirname, '../../collections', filename);
+    const filePath = path.join(__dirname, '../collections', filename);
     const fileContent = fs.readFileSync(filePath, 'utf8');
     return JSON.parse(fileContent);
   } catch (error) {
