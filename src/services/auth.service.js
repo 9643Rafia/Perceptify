@@ -1,37 +1,10 @@
-import api from "./api"
-import { setToken, removeToken } from "./storage.service.js"
+// Compatibility wrapper for migration: re-export named helpers from auth.api
+import AuthAPI from './auth.api';
 
-// Register user
-export const register = async (userData) => {
-  const response = await api.post("/auth/register", userData)
-  if (response.data.token) {
-    setToken(response.data.token)
-  }
-  return response.data
-}
+export const register = AuthAPI.register;
+export const login = AuthAPI.login;
+export const logout = AuthAPI.logout;
+export const getCurrentUser = AuthAPI.getCurrentUser;
+export const approveAccount = AuthAPI.approveAccount;
 
-// Login user
-export const login = async (email, password) => {
-  const response = await api.post("/auth/login", { email, password })
-  if (response.data.token) {
-    setToken(response.data.token)
-  }
-  return response.data
-}
-
-// Logout user
-export const logout = () => {
-  removeToken()
-}
-
-// Get current user
-export const getCurrentUser = async () => {
-  const response = await api.get("/auth/me")
-  return response.data
-}
-
-// Approve minor account
-export const approveAccount = async (token) => {
-  const response = await api.post("/auth/approve", { token })
-  return response.data
-}
+export default AuthAPI;

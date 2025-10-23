@@ -1,7 +1,7 @@
 "use client"
 
 import { createContext, useContext, useState, useEffect } from "react"
-import { getCurrentUser, login as loginService, logout as logoutService } from "../services/auth.service"
+import AuthAPI from "../services/auth.api"
 import { getToken } from "../services/storage.service.js"
 
 // Create context
@@ -18,12 +18,12 @@ export const AuthProvider = ({ children }) => {
       try {
         const token = getToken()
         if (token) {
-          const { user } = await getCurrentUser()
-          setUser(user)
+          const data = await AuthAPI.getCurrentUser()
+          setUser(data.user)
         }
       } catch (err) {
         console.error("Failed to load user:", err)
-        logoutService()
+        AuthAPI.logout()
       } finally {
         setLoading(false)
       }
@@ -37,7 +37,7 @@ export const AuthProvider = ({ children }) => {
     try {
       setLoading(true)
       setError(null)
-      const data = await loginService(email, password)
+      const data = await AuthAPI.login(email, password)
       setUser(data.user)
       return data
     } catch (err) {
@@ -50,7 +50,7 @@ export const AuthProvider = ({ children }) => {
 
   // Logout function
   const logout = () => {
-    logoutService()
+    AuthAPI.logout()
     setUser(null)
   }
 

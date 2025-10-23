@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Card, Button, Form, Alert, Badge, ProgressBar } from 'react-bootstrap';
 import { useParams, useNavigate } from 'react-router-dom';
 import { FaCheck, FaTimes } from 'react-icons/fa';
-import learningService from '../services/learning.service';
+import QuizzesAPI from '../services/quizzes.api';
 
 const LabInterface = () => {
   const { labId } = useParams();
@@ -17,29 +17,31 @@ const LabInterface = () => {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    fetchLabData();
-  }, [labId]);
+    let mounted = true;
+    (async () => {
+      try {
+        setLoading(true);
+        const data = await QuizzesAPI.getLabById(labId);
+        if (!mounted) return;
+        setLab(data.lab);
+        setResponses(
+          data.lab.challenges.map(c => ({
+            challengeId: c.challengeId,
+            verdict: null,
+            reasoning: '',
+            timeSpent: 0
+          }))
+        );
+      } catch (err) {
+        setError('Failed to load lab');
+        console.error(err);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
 
-  const fetchLabData = async () => {
-    try {
-      setLoading(true);
-      const data = await learningService.getLabById(labId);
-      setLab(data.lab);
-      setResponses(
-        data.lab.challenges.map(c => ({
-          challengeId: c.challengeId,
-          verdict: null,
-          reasoning: '',
-          timeSpent: 0
-        }))
-      );
-    } catch (err) {
-      setError('Failed to load lab');
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
+    return () => { mounted = false; };
+  }, [labId]);
 
   const handleVerdictChange = (challengeId, verdict) => {
     setResponses(responses.map(r =>
@@ -64,7 +66,7 @@ const LabInterface = () => {
 
     try {
       setSubmitting(true);
-      const result = await learningService.submitLab(labId, responses);
+  const result = await QuizzesAPI.submitLab(labId, responses);
       setResults(result);
       setShowResults(true);
     } catch (err) {
