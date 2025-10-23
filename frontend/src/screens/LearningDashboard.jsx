@@ -22,7 +22,7 @@ const LearningDashboard = () => {
     try {
       setLoading(true);
       console.log('📊 LearningDashboard: Starting to fetch data...');
-      
+
       const [tracksData, progressData, statsData, badgesData] = await Promise.all([
         LearningAPI.getAllTracks(),
         ProgressAPI.getUserProgress(),
@@ -41,7 +41,7 @@ const LearningDashboard = () => {
       setProgress(progressData);
       setStats(statsData);
       setBadges(badgesData);
-      
+
       console.log('📊 LearningDashboard: State updated, tracks count:', tracksData?.length);
     } catch (err) {
       setError('Failed to load dashboard data');
@@ -53,12 +53,12 @@ const LearningDashboard = () => {
 
   const handleStartTrack = async (trackId) => {
     try {
-  const response = await LearningAPI.startTrack(trackId);
+      const response = await ProgressAPI.startTrack(trackId);
       // Some server responses include a flag/modulesCount to indicate modules were populated
       const modulesAdded = response?.data?.modulesAdded || response?.headers?.['x-modules-added'] === 'true';
       if (modulesAdded) {
         // Re-fetch progress to ensure UI has the latest modulesProgress
-  const refreshedProgress = await ProgressAPI.getUserProgress();
+        const refreshedProgress = await ProgressAPI.getUserProgress();
         setProgress(refreshedProgress);
       }
       navigate(`/course/${trackId}`);
@@ -69,7 +69,7 @@ const LearningDashboard = () => {
 
   const handleContinueLearning = async () => {
     try {
-  const nextContent = await LearningAPI.getNextContent();
+      const nextContent = await LearningAPI.getNextContent();
 
       if (nextContent.type === 'lesson') {
         navigate(`/lesson/${nextContent.lesson._id}`);

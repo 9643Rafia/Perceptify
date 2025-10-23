@@ -391,7 +391,7 @@ exports.updateLessonProgress = async (req, res) => {
 exports.completeLesson = async (req, res) => {
   try {
     const { lessonId } = req.params;
-  const { timeSpent, skipQuiz, forceModuleComplete } = req.body;
+  const { timeSpent } = req.body;
     const userId = req.user.id;
 
     const lesson = await Lesson.findById(lessonId);
@@ -483,26 +483,8 @@ exports.completeLesson = async (req, res) => {
       }
     }
 
-    // If requested to skip module-level quiz or if all lessons completed and no module quiz, unlock next module
-    if ((skipQuiz || forceModuleComplete) || (allLessonsCompleted && !module.quizId && !module.requiresLabCompletion)) {
-      // If skipping quiz but module has a quizId, record a synthetic passed attempt so analytics reflect completion
-      if (skipQuiz && module.quizId) {
-        try {
-          const attemptNumber = (moduleProgress.quizAttempts?.length || 0) + 1;
-          moduleProgress.quizAttempts.push({
-            attemptNumber,
-            score: 100,
-            passed: true,
-            answers: [],
-            timeSpent: 0,
-            completedAt: new Date()
-          });
-          moduleProgress.bestQuizScore = Math.max(moduleProgress.bestQuizScore || 0, 100);
-        } catch (e) {
-          console.warn('Warning: failed to record synthetic quiz attempt for module', module._id, e.message || e);
-        }
-      }
-      // mark module completed
+    // If all lessons in module are completed and module has no quiz and doesn't require lab completion, unlock next module
+    if (allLessonsCompleted && !module.quizId && !module.requiresLabCompletion) {
       moduleProgress.status = 'completed';
       moduleProgress.completedAt = new Date();
 

@@ -4,6 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { FaArrowLeft, FaArrowRight, FaCheck } from 'react-icons/fa';
 import LearningAPI from '../services/learning.api';
 import ProgressAPI from '../services/progress.api';
+import QuizzesAPI from '../services/quizzes.api';
 
 const LessonPlayer = () => {
   const { lessonId } = useParams();
@@ -22,7 +23,9 @@ const LessonPlayer = () => {
   const videoRef = useRef(null);
   const timeSpentRef = useRef(0);
   const [videoFallbackUrl, setVideoFallbackUrl] = useState(null);
+  const autoSaveRef = useRef(null);
   const [videoFallbackAttempted, setVideoFallbackAttempted] = useState(false);
+  const timeDisplayRef = useRef(null);
 
   const fetchLessonData = useCallback(async () => {
     try {
@@ -32,10 +35,9 @@ const LessonPlayer = () => {
   const data = await LearningAPI.getLessonById(lessonId);
       console.log('🎥 LessonPlayer: Lesson data received:', data);
 
-    setLesson(data.lesson);
-    // Remove mini-quiz content from lesson UI entirely so lessons don't show embedded quiz forms
-    const filtered = (data.content || []).filter(i => i.type !== 'quiz');
-    setContent(filtered);
+  setLesson(data.lesson);
+  // Restore all content items including quizzes so lessons can show inline mini-quizzes
+  setContent(data.content || []);
 
       console.log('🎥 LessonPlayer: Content items:', data.content);
       data.content.forEach((item, index) => {
@@ -59,73 +61,199 @@ const LessonPlayer = () => {
     }
   }, [lessonId]);
 
-  useEffect(() => {
-    fetchLessonData();
+  // Minimal inline mini-quiz component (renders inside lesson content)
+  const MiniQuiz = ({ content, onComplete }) => {
+    const [quiz, setQuiz] = useState(null);
+    const [answers, setAnswers] = useState({});
+    const [loadingQuiz, setLoadingQuiz] = useState(false);
+    const [submitting, setSubmitting] = useState(false);
+    const [errorQuiz, setErrorQuiz] = useState('');
 
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-      if (saveIntervalRef.current) clearInterval(saveIntervalRef.current);
-      // cleanup blob url
-      if (videoFallbackUrl) {
-        try { URL.revokeObjectURL(videoFallbackUrl); } catch (e) {}
-      }
+    useEffect(() => {
+      let mounted = true;
+      const load = async () => {
+        if (!content?.quizId) return;
+        try {
+          setLoadingQuiz(true);
+          const data = await QuizzesAPI.getQuizById(content.quizId);
+          if (!mounted) return;
+          setQuiz(data.quiz || data);
+        } catch (e) {
+          console.error('MiniQuiz: failed to load quiz', e);
+          setErrorQuiz('Failed to load quiz');
+        } finally {
+          if (mounted) setLoadingQuiz(false);
+        }
+      };
+      load();
+      return () => { mounted = false; };
+    }, [content]);
+
+    const toggleChoice = (questionId, choiceIndex, multi) => {
+      setAnswers(prev => {
+        const copy = { ...prev };
+        if (multi) {
+          const arr = new Set(copy[questionId] || []);
+          if (arr.has(choiceIndex)) arr.delete(choiceIndex); else arr.add(choiceIndex);
+          copy[questionId] = Array.from(arr);
+        } else {
+          copy[questionId] = [choiceIndex];
+        }
+        return copy;
+      });
     };
-  }, [fetchLessonData, videoFallbackUrl]);
 
-
-
-    const autoSaveProgress = useCallback(async () => {
-      if (!lesson || timeSpentRef.current === 0) return;
-
+    const handleSubmit = async () => {
+      if (!quiz) return;
+      setSubmitting(true);
       try {
-        setSaving(true);
-        await ProgressAPI.updateLessonProgress(lessonId, {
-          timeSpent: timeSpentRef.current,
-          lastPosition: currentContentIndex,
-          completedContentItems: completedItems
-        });
-      } catch (err) {
-        console.error('Auto-save failed:', err);
+        const formatted = quiz.questions.map(q => ({
+          questionId: q.questionId || q._id,
+          answers: (answers[q.questionId] || answers[q._id] || []).map(i => String(i))
+        }));
+        await QuizzesAPI.submitQuiz(quiz.quizId || quiz._id || content.quizId, formatted, 0);
+        if (onComplete) onComplete();
+      } catch (e) {
+        console.error('MiniQuiz submit failed', e);
+        setErrorQuiz('Failed to submit quiz');
       } finally {
-        setSaving(false);
+        setSubmitting(false);
       }
-    }, [lesson, lessonId, currentContentIndex, completedItems]);
-  useEffect(() => {
-  // Start timer when lesson loaded: increment a ref every second to avoid
-    // forcing a full re-render every tick. We update visible state less
-    // frequently (every 5s) so the UI doesn't re-render every second.
-    if (!lesson) return;
-
-    if (!timerRef.current) {
-      timerRef.current = setInterval(() => {
-        timeSpentRef.current += 1;
-      }, 1000);
-    }
-
-    // Sync ref -> state every 5 seconds for UI and occasional updates
-    let syncInterval = setInterval(() => {
-      setTimeSpent(timeSpentRef.current);
-    }, 5000);
-
-    // Auto-save every 30 seconds
-    if (!saveIntervalRef.current) {
-      saveIntervalRef.current = setInterval(() => {
-        autoSaveProgress();
-      }, 30000);
-    }
-
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
-      if (saveIntervalRef.current) {
-        clearInterval(saveIntervalRef.current);
-        saveIntervalRef.current = null;
-      }
-      if (syncInterval) clearInterval(syncInterval);
     };
-  }, [lesson, autoSaveProgress]);
+
+    if (!content?.quizId) return <div className="alert alert-secondary">Quiz not available</div>;
+    if (loadingQuiz) return <div>Loading quiz...</div>;
+    if (errorQuiz) return <div className="text-danger">{errorQuiz}</div>;
+    if (!quiz) return null;
+
+    return (
+      <div className="mini-quiz">
+        <h5>{quiz.title}</h5>
+        <p className="text-muted">{quiz.description}</p>
+        {quiz.questions.map((q, idx) => {
+          const qid = q.questionId || q._id || idx;
+          const multi = q.type === 'multiple';
+          return (
+            <div key={qid} className="mb-3">
+              <div><strong>{idx + 1}. {q.question}</strong></div>
+              <div>
+                {(q.choices || []).map((choice, ci) => {
+                  const checked = (answers[qid] || []).includes(ci);
+                  return (
+                    <label key={ci} className="d-block">
+                      <input
+                        type={multi ? 'checkbox' : 'radio'}
+                        name={`q-${qid}`}
+                        checked={checked}
+                        onChange={() => toggleChoice(qid, ci, multi)}
+                        className="me-2"
+                      />
+                      {choice}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+        <div className="d-flex justify-content-end">
+          <button className="btn btn-sm btn-primary" disabled={submitting} onClick={handleSubmit}>
+            {submitting ? 'Submitting...' : 'Submit Answer'}
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+useEffect(() => {
+  let mounted = true;
+
+  const loadLesson = async () => {
+    try {
+      setLoading(true);
+      console.log('🎥 Fetching lesson data for:', lessonId);
+      const data = await LearningAPI.getLessonById(lessonId);
+
+      if (!mounted) return;
+
+      setLesson(data.lesson);
+      setContent(data.content || []);
+
+      if (data.progress) {
+        setTimeSpent(data.progress.timeSpent || 0);
+        timeSpentRef.current = data.progress.timeSpent || 0;
+        setCompletedItems(data.progress.completedContentItems || []);
+      }
+
+    } catch (err) {
+      console.error('❌ Error loading lesson:', err);
+      if (mounted) setError('Failed to load lesson');
+    } finally {
+      if (mounted) setLoading(false);
+    }
+  };
+
+  loadLesson();
+
+  return () => {
+    mounted = false;
+    if (timerRef.current) clearInterval(timerRef.current);
+    if (saveIntervalRef.current) clearInterval(saveIntervalRef.current);
+    if (videoFallbackUrl) {
+      try { URL.revokeObjectURL(videoFallbackUrl); } catch (e) {}
+    }
+  };
+}, [lessonId]); // ✅ Only re-run if lessonId changes
+
+
+// Keep a fresh copy of auto-save function (refs avoid re-renders)
+useEffect(() => {
+  autoSaveRef.current = async () => {
+    if (!lesson || timeSpentRef.current === 0) return;
+    try {
+      setSaving(true);
+      await ProgressAPI.updateLessonProgress(lessonId, {
+        timeSpent: timeSpentRef.current,
+        lastPosition: currentContentIndex,
+        completedContentItems: completedItems,
+      });
+    } catch (err) {
+      console.error('Auto-save failed:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
+}, [lesson, lessonId, currentContentIndex, completedItems]);
+
+useEffect(() => {
+  if (!lesson) return;
+
+  // 1️⃣ Timer: increment every second
+  if (!timerRef.current) {
+    timerRef.current = setInterval(() => {
+      timeSpentRef.current += 1;
+    }, 1000);
+  }
+
+  // 3️⃣ Auto-save progress every 30s using the latest ref
+  if (!saveIntervalRef.current) {
+    saveIntervalRef.current = setInterval(() => {
+      if (autoSaveRef.current) autoSaveRef.current();
+    }, 30000);
+  }
+
+  // 🧹 Cleanup on unmount or lesson change
+  return () => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    if (saveIntervalRef.current) {
+      clearInterval(saveIntervalRef.current);
+      saveIntervalRef.current = null;
+    }
+  };
+}, [lesson]);
 
 
 
@@ -160,7 +288,8 @@ const LessonPlayer = () => {
       // No confirmation: complete lesson immediately even if some items are incomplete
 
       // Request server to skip quiz/module-level requirements when completing
-  const result = await ProgressAPI.completeLesson(lessonId, timeSpent, { skipQuiz: true, forceModuleComplete: true });
+  // By default do not skip quizzes — let the backend enforce quiz requirements.
+  const result = await ProgressAPI.completeLesson(lessonId, timeSpent);
 
       if (result.xpEarned) {
         alert(`Lesson completed! You earned ${result.xpEarned} XP!${result.leveledUp ? ' Level Up!' : ''}`);
@@ -269,6 +398,14 @@ const LessonPlayer = () => {
               />
             )}
           </div>
+        );
+
+      case 'quiz':
+        return (
+          <MiniQuiz
+            content={currentContent}
+            onComplete={() => markContentComplete(currentContent._id)}
+          />
         );
 
       default:
