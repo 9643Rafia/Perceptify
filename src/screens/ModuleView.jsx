@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Card, Button, Badge, Alert, ListGroup } from 'react-bootstrap';
 import { useParams, useNavigate } from 'react-router-dom';
 import { FaLock, FaCheck, FaClock, FaPlay, FaClipboardCheck } from 'react-icons/fa';
-import learningService from '../services/learning.service';
+import LearningAPI from '../services/learning.api';
+import ProgressAPI from '../services/progress.api';
 
 const ModuleView = () => {
   const { moduleId } = useParams();
@@ -14,23 +15,25 @@ const ModuleView = () => {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    fetchModuleData();
-  }, [moduleId]);
+    let mounted = true;
+    (async () => {
+      try {
+        setLoading(true);
+        const data = await LearningAPI.getModuleById(moduleId);
+        if (!mounted) return;
+        setModule(data.module);
+        setLessons(data.lessons);
+        setModuleProgress(data.progress);
+      } catch (err) {
+        setError('Failed to load module data');
+        console.error(err);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
 
-  const fetchModuleData = async () => {
-    try {
-      setLoading(true);
-      const data = await learningService.getModuleById(moduleId);
-      setModule(data.module);
-      setLessons(data.lessons);
-      setModuleProgress(data.progress);
-    } catch (err) {
-      setError('Failed to load module data');
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
+    return () => { mounted = false; };
+  }, [moduleId]);
 
   const getLessonProgress = (lessonId) => {
     if (!moduleProgress || !moduleProgress.lessonsProgress) return null;
@@ -51,7 +54,7 @@ const ModuleView = () => {
     const unlocked = isLessonUnlocked(lesson);
     if (unlocked) {
       try {
-        await learningService.startLesson(lesson._id);
+        await ProgressAPI.startLesson(lesson._id);
         navigate(`/lesson/${lesson._id}`);
       } catch (err) {
         setError('Failed to start lesson: ' + err.response?.data?.message);

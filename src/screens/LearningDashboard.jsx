@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Card, Button, ProgressBar, Badge, Alert } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 import { FaTrophy, FaFire, FaStar, FaClock, FaAward } from 'react-icons/fa';
-import learningService from '../services/learning.service';
+import LearningAPI from '../services/learning.api';
+import ProgressAPI from '../services/progress.api';
 
 const LearningDashboard = () => {
   const [tracks, setTracks] = useState([]);
@@ -23,10 +24,10 @@ const LearningDashboard = () => {
       console.log('📊 LearningDashboard: Starting to fetch data...');
       
       const [tracksData, progressData, statsData, badgesData] = await Promise.all([
-        learningService.getAllTracks(),
-        learningService.getUserProgress(),
-        learningService.getDashboardStats(),
-        learningService.getUserBadges()
+        LearningAPI.getAllTracks(),
+        ProgressAPI.getUserProgress(),
+        ProgressAPI.getDashboardStats(),
+        ProgressAPI.getUserBadges()
       ]);
 
       console.log('📊 LearningDashboard: Data received:', {
@@ -52,12 +53,12 @@ const LearningDashboard = () => {
 
   const handleStartTrack = async (trackId) => {
     try {
-      const response = await learningService.startTrack(trackId);
+  const response = await LearningAPI.startTrack(trackId);
       // Some server responses include a flag/modulesCount to indicate modules were populated
       const modulesAdded = response?.data?.modulesAdded || response?.headers?.['x-modules-added'] === 'true';
       if (modulesAdded) {
         // Re-fetch progress to ensure UI has the latest modulesProgress
-        const refreshedProgress = await learningService.getUserProgress();
+  const refreshedProgress = await ProgressAPI.getUserProgress();
         setProgress(refreshedProgress);
       }
       navigate(`/course/${trackId}`);
@@ -68,7 +69,7 @@ const LearningDashboard = () => {
 
   const handleContinueLearning = async () => {
     try {
-      const nextContent = await learningService.getNextContent();
+  const nextContent = await LearningAPI.getNextContent();
 
       if (nextContent.type === 'lesson') {
         navigate(`/lesson/${nextContent.lesson._id}`);
@@ -213,73 +214,74 @@ const LearningDashboard = () => {
 
       <Row className="g-4">
         {console.log('🎨 LearningDashboard: Rendering tracks:', tracks)}
-        {tracks.map(track => {
-          const trackProgress = getTrackProgress(track._id);
-          const completion = calculateTrackCompletion(trackProgress);
-          const unlocked = isTrackUnlocked(track);
+        {tracks && tracks.length > 0 ? (
+          tracks.map(track => {
+            const trackProgress = getTrackProgress(track._id);
+            const completion = calculateTrackCompletion(trackProgress);
+            const unlocked = isTrackUnlocked(track);
 
-          console.log('🎨 LearningDashboard: Rendering track:', {
-            track: track,
-            trackProgress,
-            completion,
-            unlocked
-          });
+            console.log('🎨 LearningDashboard: Rendering track:', {
+              track: track,
+              trackProgress,
+              completion,
+              unlocked
+            });
 
-          return (
-            <Col md={4} key={track._id}>
-              <Card className={`track-card h-100 ${!unlocked ? 'locked' : ''}`}>
-                <Card.Body>
-                  <div className="d-flex justify-content-between align-items-start mb-3">
-                    <span className="track-icon">{track.icon}</span>
-                    <Badge bg={track.level === 1 ? 'success' : track.level === 2 ? 'warning' : 'danger'}>
-                      Level {track.level}
-                    </Badge>
-                  </div>
-
-                  <h5>{track.name}</h5>
-                  <p className="text-muted small">{track.description}</p>
-
-                  <div className="mb-3">
-                    <div className="d-flex justify-content-between mb-1">
-                      <small>Progress</small>
-                      <small>{completion}%</small>
+            return (
+              <Col md={4} key={track._id}>
+                <Card className={`track-card h-100 ${!unlocked ? 'locked' : ''}`}>
+                  <Card.Body>
+                    <div className="d-flex justify-content-between align-items-start mb-3">
+                      <span className="track-icon">{track.icon}</span>
+                      <Badge bg={track.level === 1 ? 'success' : track.level === 2 ? 'warning' : 'danger'}>
+                        Level {track.level}
+                      </Badge>
                     </div>
-                    <ProgressBar now={completion} variant={completion === 100 ? 'success' : 'primary'} />
-                  </div>
 
-                  <div className="track-meta mb-3">
-                    <small className="d-block">
-                      <FaClock className="me-1" />
-                      {track.estimatedDuration}
-                    </small>
-                    <small className="d-block">
-                      {track.moduleCount} modules
-                    </small>
-                  </div>
+                    <h5>{track.name}</h5>
+                    <p className="text-muted small">{track.description}</p>
 
-                  {!unlocked ? (
-                    <Button variant="secondary" disabled block>
-                      🔒 Locked
-                    </Button>
-                  ) : trackProgress?.status === 'completed' ? (
-                    <Button variant="success" onClick={() => navigate(`/course/${track._id}`)} block>
-                      <FaTrophy className="me-2" />
-                      View Certificate
-                    </Button>
-                  ) : trackProgress ? (
-                    <Button variant="primary" onClick={() => navigate(`/course/${track._id}`)} block>
-                      Continue Track
-                    </Button>
-                  ) : (
-                    <Button variant="outline-primary" onClick={() => handleStartTrack(track._id)} block>
-                      Start Track
-                    </Button>
-                  )}
-                </Card.Body>
-              </Card>
-            </Col>
-          );
-        })
+                    <div className="mb-3">
+                      <div className="d-flex justify-content-between mb-1">
+                        <small>Progress</small>
+                        <small>{completion}%</small>
+                      </div>
+                      <ProgressBar now={completion} variant={completion === 100 ? 'success' : 'primary'} />
+                    </div>
+
+                    <div className="track-meta mb-3">
+                      <small className="d-block">
+                        <FaClock className="me-1" />
+                        {track.estimatedDuration}
+                      </small>
+                      <small className="d-block">
+                        {track.moduleCount} modules
+                      </small>
+                    </div>
+
+                    {!unlocked ? (
+                      <Button variant="secondary" disabled block>
+                        🔒 Locked
+                      </Button>
+                    ) : trackProgress?.status === 'completed' ? (
+                      <Button variant="success" onClick={() => navigate(`/course/${track._id}`)} block>
+                        <FaTrophy className="me-2" />
+                        View Certificate
+                      </Button>
+                    ) : trackProgress ? (
+                      <Button variant="primary" onClick={() => navigate(`/course/${track._id}`)} block>
+                        Continue Track
+                      </Button>
+                    ) : (
+                      <Button variant="outline-primary" onClick={() => handleStartTrack(track._id)} block>
+                        Start Track
+                      </Button>
+                    )}
+                  </Card.Body>
+                </Card>
+              </Col>
+            );
+          })
         ) : (
           <Col>
             <Card className="text-center p-5">

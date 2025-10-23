@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Card, Button, ProgressBar, Badge, Alert } from 'react-bootstrap';
 import { useParams, useNavigate } from 'react-router-dom';
 import { FaLock, FaCheck, FaClock, FaPlay } from 'react-icons/fa';
-import learningService from '../services/learning.service';
+import LearningAPI from '../services/learning.api';
 
 const CourseView = () => {
   const { trackId } = useParams();
@@ -14,23 +14,25 @@ const CourseView = () => {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    fetchCourseData();
-  }, [trackId]);
+    let mounted = true;
+    (async () => {
+      try {
+        setLoading(true);
+        const data = await LearningAPI.getTrackById(trackId);
+        if (!mounted) return;
+        setTrack(data.track);
+        setModules(data.modules);
+        setProgress(data.progress);
+      } catch (err) {
+        setError('Failed to load course data');
+        console.error(err);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
 
-  const fetchCourseData = async () => {
-    try {
-      setLoading(true);
-      const data = await learningService.getTrackById(trackId);
-      setTrack(data.track);
-      setModules(data.modules);
-      setProgress(data.progress);
-    } catch (err) {
-      setError('Failed to load course data');
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
+    return () => { mounted = false; };
+  }, [trackId]);
 
   const getModuleProgress = (moduleId) => {
     if (!progress || !progress.modulesProgress) return null;

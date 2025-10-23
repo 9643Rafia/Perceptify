@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Container, Row, Col, Card, Button, Form, Alert, Badge } from 'react-bootstrap';
 import { useParams, useNavigate } from 'react-router-dom';
 import { FaCheck, FaTimes, FaFlag, FaClock } from 'react-icons/fa';
-import learningService from '../services/learning.service';
+import QuizzesAPI from '../services/quizzes.api';
 
 const QuizInterface = () => {
   const { quizId } = useParams();
@@ -18,11 +18,26 @@ const QuizInterface = () => {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const timerRef = useRef(null);
+  const handleSubmitRef = useRef(null);
 
   useEffect(() => {
-    fetchQuizData();
+    let mounted = true;
+    (async () => {
+      try {
+        setLoading(true);
+        const data = await QuizzesAPI.getQuizById(quizId);
+        if (!mounted) return;
+        setQuiz(data.quiz);
+      } catch (err) {
+        setError('Failed to load quiz');
+        console.error(err);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
 
     return () => {
+      mounted = false;
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [quizId]);
@@ -31,30 +46,22 @@ const QuizInterface = () => {
     if (quiz && quiz.timeLimit && !showResults) {
       setTimeRemaining(quiz.timeLimit * 60);
 
-      timerRef.current = setInterval(() => {
-        setTimeRemaining(prev => {
-          if (prev <= 1) {
-            handleSubmit();
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
+        timerRef.current = setInterval(() => {
+          setTimeRemaining(prev => {
+            if (prev <= 1) {
+              handleSubmitRef.current && handleSubmitRef.current();
+              return 0;
+            }
+            return prev - 1;
+          });
+        }, 1000);
     }
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
   }, [quiz, showResults]);
 
-  const fetchQuizData = async () => {
-    try {
-      setLoading(true);
-      const data = await learningService.getQuizById(quizId);
-      setQuiz(data.quiz);
-    } catch (err) {
-      setError('Failed to load quiz');
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  
 
   const handleAnswerSelect = (questionId, answer) => {
     const question = quiz.questions.find(q => q.questionId === questionId);
@@ -110,7 +117,7 @@ const QuizInterface = () => {
       }));
 
       const startTime = quiz.timeLimit ? quiz.timeLimit * 60 - timeRemaining : 0;
-      const result = await learningService.submitQuiz(quizId, formattedAnswers, startTime);
+  const result = await QuizzesAPI.submitQuiz(quizId, formattedAnswers, startTime);
 
       setResults(result);
       setShowResults(true);
@@ -124,6 +131,9 @@ const QuizInterface = () => {
       setSubmitting(false);
     }
   };
+
+  // keep a stable ref to handleSubmit for timer effect
+  handleSubmitRef.current = handleSubmit;
 
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useSearchParams, useNavigate } from "react-router-dom"
-import { approveAccount } from "../services/auth.service"
+import AuthAPI from "../services/auth.api"
 
 const GuardianApproval = () => {
   const [searchParams] = useSearchParams()
@@ -20,7 +20,7 @@ const GuardianApproval = () => {
       }
 
       try {
-        const response = await approveAccount(token)
+        await AuthAPI.approveAccount(token)
         setStatus("success")
         setMessage("Account approved successfully! The user can now log in.")
       } catch (error) {

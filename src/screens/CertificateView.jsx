@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Container, Row, Col, Card, Button, Alert } from 'react-bootstrap';
+import { Container, Row, Col, Button, Alert } from 'react-bootstrap';
 import { useParams, useNavigate } from 'react-router-dom';
 import { FaDownload, FaShareAlt, FaAward } from 'react-icons/fa';
-import learningService from '../services/learning.service';
+import ProgressAPI from '../services/progress.api';
 
 const CertificateView = () => {
   const { certId } = useParams();
@@ -12,27 +12,29 @@ const CertificateView = () => {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    fetchCertificate();
-  }, [certId]);
+    let mounted = true;
+    (async () => {
+      try {
+        setLoading(true);
+        const certificates = await ProgressAPI.getUserCertificates();
+        if (!mounted) return;
+        const cert = certificates.find(c => c._id === certId || c.certificateId === certId);
 
-  const fetchCertificate = async () => {
-    try {
-      setLoading(true);
-      const certificates = await learningService.getUserCertificates();
-      const cert = certificates.find(c => c._id === certId || c.certificateId === certId);
-
-      if (!cert) {
-        setError('Certificate not found');
-      } else {
-        setCertificate(cert);
+        if (!cert) {
+          setError('Certificate not found');
+        } else {
+          setCertificate(cert);
+        }
+      } catch (err) {
+        setError('Failed to load certificate');
+        console.error(err);
+      } finally {
+        if (mounted) setLoading(false);
       }
-    } catch (err) {
-      setError('Failed to load certificate');
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
+    })();
+
+    return () => { mounted = false; };
+  }, [certId]);
 
   const handleDownload = () => {
     if (certificate.pdfUrl) {

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
-import { register } from "../services/auth.service"
+import AuthAPI from "../services/auth.api"
 
 const SignUpForm = () => {
   const navigate = useNavigate()
@@ -28,9 +28,7 @@ const SignUpForm = () => {
     } else {
       setIsMinor(false)
       // Clear guardian email if user is not a minor
-      if (formData.guardianEmail) {
-        setFormData((prev) => ({ ...prev, guardianEmail: "" }))
-      }
+      setFormData((prev) => ({ ...prev, guardianEmail: "" }))
     }
   }, [formData.age])
 
@@ -107,8 +105,8 @@ const SignUpForm = () => {
         guardianEmail: isMinor ? formData.guardianEmail : null,
       }
 
-      // Call the register API
-      const response = await register(userData)
+    // Call the register API
+    await AuthAPI.register(userData)
 
       // Set success status
       setSubmitStatus({

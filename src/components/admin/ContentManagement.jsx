@@ -27,13 +27,11 @@ const ContentManagement = () => {
 
   // Mock content data - in real app this would come from API
   useEffect(() => {
-    loadContent()
-  }, [activeTab])
-
-  const loadContent = () => {
+    let mounted = true
     setLoading(true)
     // Simulate API call
-    setTimeout(() => {
+    const t = setTimeout(() => {
+      if (!mounted) return
       const mockData = {
         modules: [
           {
@@ -91,7 +89,9 @@ const ContentManagement = () => {
       setContent(mockData[activeTab] || [])
       setLoading(false)
     }, 500)
-  }
+
+    return () => { mounted = false; clearTimeout(t); }
+  }, [activeTab])
 
   const showAlert = (type, message) => {
     setAlert({ type, message })

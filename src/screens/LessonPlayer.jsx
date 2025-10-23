@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Container, Row, Col, Card, Button, Alert } from 'react-bootstrap';
 import { useParams, useNavigate } from 'react-router-dom';
 import { FaArrowLeft, FaArrowRight, FaCheck } from 'react-icons/fa';
-import learningService from '../services/learning.service';
+import LearningAPI from '../services/learning.api';
+import ProgressAPI from '../services/progress.api';
 
 const LessonPlayer = () => {
   const { lessonId } = useParams();
@@ -28,7 +29,7 @@ const LessonPlayer = () => {
       setLoading(true);
       console.log('🎥 LessonPlayer: Fetching lesson data for lessonId:', lessonId);
 
-      const data = await learningService.getLessonById(lessonId);
+  const data = await LearningAPI.getLessonById(lessonId);
       console.log('🎥 LessonPlayer: Lesson data received:', data);
 
     setLesson(data.lesson);
@@ -78,7 +79,7 @@ const LessonPlayer = () => {
 
       try {
         setSaving(true);
-        await learningService.updateLessonProgress(lessonId, {
+        await ProgressAPI.updateLessonProgress(lessonId, {
           timeSpent: timeSpentRef.current,
           lastPosition: currentContentIndex,
           completedContentItems: completedItems
@@ -159,7 +160,7 @@ const LessonPlayer = () => {
       // No confirmation: complete lesson immediately even if some items are incomplete
 
       // Request server to skip quiz/module-level requirements when completing
-      const result = await learningService.completeLesson(lessonId, timeSpent, { skipQuiz: true, forceModuleComplete: true });
+  const result = await ProgressAPI.completeLesson(lessonId, timeSpent, { skipQuiz: true, forceModuleComplete: true });
 
       if (result.xpEarned) {
         alert(`Lesson completed! You earned ${result.xpEarned} XP!${result.leveledUp ? ' Level Up!' : ''}`);
