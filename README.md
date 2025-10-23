@@ -46,8 +46,15 @@ Notes:
 
 //Write How to start the project
 
-At project base run:
-npm run start (for frontend)
-npm run dev:server (for development because it reruns the server automatically when changes are made)
-npm run start:server (for production /showcasing)
-now only a single .env file exist at the project base directory with all the variables (not good for hosting but will do for our fyp for now)
+
+## From project base directory
+
+**Frontend:**
+
+cd ./frontend && npm run start
+
+**Backend:**
+
+cd ./backend && npm run dev (for development)
+
+cd ./backend && npm run start (for production)
