@@ -1,10 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Container, Row, Col, Card, Button, Alert } from 'react-bootstrap';
 import { useParams, useNavigate } from 'react-router-dom';
 import { FaArrowLeft, FaArrowRight, FaCheck } from 'react-icons/fa';
 import LearningAPI from '../services/learning.api';
 import LessonProgressAPI from '../services/lessonProgress.service';
 import ProgressAPI from '../services/progress.api';
+
+const API_BASE = process.env.REACT_APP_API_BASE || 'http://localhost:5000/api';
 
 const LessonPlayer = () => {
   const { lessonId } = useParams();
@@ -25,8 +27,114 @@ const LessonPlayer = () => {
   const autoSaveRef = useRef(null);
   const [videoFallbackAttempted, setVideoFallbackAttempted] = useState(false);
   const timeDisplayRef = useRef(null);
+  const debounceRef = useRef(null);
 
-  // --- removed older fetchLessonData and timer/auto-save to replace with drop-in below ---
+  // --- helpers for persistence ---
+  const lsKey = `lesson:${lessonId}`;
+  const mirrorLocal = useCallback((payload) => {
+    try {
+      console.log('💾 MIRROR LOCAL: Saving to localStorage', { lsKey, payload });
+      localStorage.setItem(lsKey, JSON.stringify({
+        lastPosition: payload.lastPosition,
+        timeSpent: payload.timeSpent,
+        completedContentItems: payload.completedContentItems,
+        t: Date.now(),
+      }));
+      console.log('✅ MIRROR LOCAL: Successfully saved to localStorage');
+    } catch (err) {
+      console.error('❌ MIRROR LOCAL: Failed to save to localStorage:', err);
+    }
+  }, [lsKey]);
+  const persistDebounced = useCallback((payload, delay = 600) => {
+    mirrorLocal(payload);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      try {
+        setSaving(true);
+        await LessonProgressAPI.updateLessonProgress(lessonId, payload);
+      } catch (e) {
+        console.warn('Debounced save failed', e?.message || e);
+      } finally {
+        setSaving(false);
+      }
+    }, delay);
+  }, [lessonId, mirrorLocal]);
+
+  // Function to refresh progress from server (used when returning from quiz)
+  const refreshProgress = useCallback(async () => {
+    if (!lesson) {
+      console.log('🚫 PROGRESS REFRESH: No lesson loaded, skipping');
+      return;
+    }
+
+    console.log('🔄 PROGRESS REFRESH: Starting progress refresh...', { lessonId });
+
+    try {
+      console.log('� PROGRESS REFRESH: Fetching latest lesson data from server...');
+      const data = await LearningAPI.getLessonById(lessonId);
+      let serverProgress = data.progress || {};
+      console.log('📊 PROGRESS REFRESH: Server progress received:', serverProgress);
+
+      // Load current localStorage
+      let local = null;
+      try {
+        const localRaw = localStorage.getItem(lsKey);
+        local = localRaw ? JSON.parse(localRaw) : null;
+        console.log('💽 PROGRESS REFRESH: localStorage data loaded:', local);
+      } catch (localErr) {
+        console.warn('⚠️ PROGRESS REFRESH: Failed to parse localStorage:', localErr);
+      }
+
+      // Current state
+      console.log('📈 PROGRESS REFRESH: Current component state:', {
+        timeSpent: timeSpentRef.current,
+        completedItems: completedItems,
+        currentContentIndex: currentContentIndex
+      });
+
+      // Merge server and local data
+      const mergedProgress = {
+        timeSpent: Math.max(serverProgress.timeSpent || 0, local?.timeSpent || timeSpentRef.current || 0),
+        completedContentItems: Array.from(new Set([
+          ...(serverProgress.completedContentItems || []),
+          ...(local?.completedContentItems || []),
+          ...completedItems
+        ])),
+        lastPosition: serverProgress.lastPosition ?? local?.lastPosition ?? currentContentIndex
+      };
+
+      console.log('🔀 PROGRESS REFRESH: Merged progress result:', mergedProgress);
+
+      // Check if there are changes
+      const hasChanges =
+        mergedProgress.timeSpent !== timeSpentRef.current ||
+        mergedProgress.completedContentItems.length !== completedItems.length ||
+        mergedProgress.lastPosition !== currentContentIndex;
+
+      console.log('🔍 PROGRESS REFRESH: Changes detected:', hasChanges, {
+        timeChanged: mergedProgress.timeSpent !== timeSpentRef.current,
+        completedChanged: mergedProgress.completedContentItems.length !== completedItems.length,
+        positionChanged: mergedProgress.lastPosition !== currentContentIndex
+      });
+
+      // Update state and refs
+      timeSpentRef.current = mergedProgress.timeSpent;
+      setCompletedItems(mergedProgress.completedContentItems);
+      setCurrentContentIndex(mergedProgress.lastPosition);
+
+      // Update localStorage with merged data
+      mirrorLocal(mergedProgress);
+
+      console.log('✅ PROGRESS REFRESH: Progress refresh completed successfully');
+
+      if (hasChanges) {
+        console.log('🎯 PROGRESS REFRESH: UI should update with new progress');
+      }
+
+    } catch (err) {
+      console.error('❌ PROGRESS REFRESH: Failed to refresh progress:', err);
+    }
+  }, [lesson, lessonId, lsKey, completedItems, currentContentIndex, mirrorLocal]);
 
   // --- Load Lesson Data ---
   useEffect(() => {
@@ -37,17 +145,57 @@ const LessonPlayer = () => {
         setLoading(true);
         console.log('🎥 Fetching lesson data for:', lessonId);
         const data = await LearningAPI.getLessonById(lessonId);
-
         if (!mounted) return;
 
         setLesson(data.lesson);
         setContent(data.content || []);
 
-        if (data.progress) {
-          timeSpentRef.current = data.progress.timeSpent || 0;
-          setCompletedItems(data.progress.completedContentItems || []);
+        // start with server values
+        let serverTime = Number(data?.progress?.timeSpent ?? 0);
+        let serverIndex = Number(data?.progress?.lastPosition ?? 0);
+        let serverCompleted = Array.isArray(data?.progress?.completedContentItems)
+          ? data.progress.completedContentItems
+          : [];
+
+        console.log('📊 LESSON LOAD: Server progress loaded:', {
+          serverTime,
+          serverIndex,
+          serverCompleted
+        });
+
+        // merge with local snapshot (if present)
+        let local = null;
+        try { local = JSON.parse(localStorage.getItem(lsKey) || 'null'); } catch {}
+        console.log('💽 LESSON LOAD: localStorage progress loaded:', local);
+
+        if (local) {
+          if (Number.isFinite(local.timeSpent) && local.timeSpent > serverTime) {
+            console.log('⏰ LESSON LOAD: Using localStorage timeSpent (higher than server)');
+            serverTime = local.timeSpent;
+          }
+          if (Number.isFinite(local.lastPosition)) {
+            console.log('📍 LESSON LOAD: Using localStorage lastPosition');
+            serverIndex = local.lastPosition;
+          }
+          if (Array.isArray(local.completedContentItems)) {
+            console.log('✅ LESSON LOAD: Merging completedContentItems');
+            serverCompleted = Array.from(new Set([...serverCompleted, ...local.completedContentItems]));
+          }
         }
 
+        // clamp index to available content
+        const maxIndex = Math.max(0, (data.content?.length || 1) - 1);
+        const startIndex = Math.min(Math.max(0, serverIndex), maxIndex);
+
+        console.log('🎯 LESSON LOAD: Final merged progress:', {
+          timeSpent: serverTime,
+          lastPosition: startIndex,
+          completedContentItems: serverCompleted
+        });
+
+        timeSpentRef.current = Math.max(0, serverTime | 0);
+        setCompletedItems(serverCompleted);
+        setCurrentContentIndex(startIndex);
       } catch (err) {
         console.error('❌ Error loading lesson:', err);
         if (mounted) setError('Failed to load lesson');
@@ -63,33 +211,33 @@ const LessonPlayer = () => {
       if (timerRef.current) clearInterval(timerRef.current);
       if (saveIntervalRef.current) clearInterval(saveIntervalRef.current);
       if (videoFallbackUrl) {
-        try { URL.revokeObjectURL(videoFallbackUrl); } catch (e) { }
+        try { URL.revokeObjectURL(videoFallbackUrl); } catch (e) {}
       }
     };
-  }, [lessonId, videoFallbackUrl]); // ✅ Only re-run if lessonId or fallback changes
-
+  }, [lessonId, videoFallbackUrl, lsKey]); // ✅ Only re-run if lessonId, fallback, or lsKey changes
 
   // --- Timer + Auto-Save Logic ---
   // Keep a fresh copy of auto-save function (refs avoid re-renders)
   useEffect(() => {
     autoSaveRef.current = async () => {
       if (!lesson) return;
-      // Always use latest timer value for timeSpent
       const latestTimeSpent = timeSpentRef.current;
       try {
         setSaving(true);
-        await LessonProgressAPI.updateLessonProgress(lessonId, {
+        const payload = {
           timeSpent: latestTimeSpent,
           lastPosition: currentContentIndex,
           completedContentItems: completedItems,
-        });
+        };
+        mirrorLocal(payload); // mirror on every autosave
+        await LessonProgressAPI.updateLessonProgress(lessonId, payload);
       } catch (err) {
         console.error('Auto-save failed:', err);
       } finally {
         setSaving(false);
       }
     };
-  }, [lesson, lessonId, currentContentIndex, completedItems]);
+  }, [lesson, lessonId, currentContentIndex, completedItems, mirrorLocal]);
 
   useEffect(() => {
     if (!lesson) return;
@@ -101,7 +249,7 @@ const LessonPlayer = () => {
       }, 1000);
     }
 
-    // 2️⃣ Update visible time every 5s directly via DOM (no React state updates)
+    // 2️⃣ Update visible time every 1s directly via DOM (no React state updates)
     const syncInterval = setInterval(() => {
       try {
         const secs = timeSpentRef.current;
@@ -109,7 +257,6 @@ const LessonPlayer = () => {
         const formatted = `${mins}:${(secs % 60).toString().padStart(2, '0')}`;
         if (timeDisplayRef.current) timeDisplayRef.current.textContent = formatted;
       } catch (e) {
-        // swallow any rare errors
         console.warn('Time display update failed', e.message || e);
       }
     }, 1000);
@@ -135,28 +282,82 @@ const LessonPlayer = () => {
     };
   }, [lesson]); // ✅ Run once per lesson load
 
-  // (Ref-based time display is used above to avoid re-renders; a React.memo TimeDisplay
-  // can be added later if you prefer React-driven updates.)
+  // Persist on tab close / hide (sendBeacon + local mirror)
+  useEffect(() => {
+    const handler = () => {
+      const payload = {
+        timeSpent: timeSpentRef.current || 0,
+        lastPosition: currentContentIndex,
+        completedContentItems: completedItems,
+      };
+      mirrorLocal(payload);
+      try {
+        const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+        const url = `${API_BASE}/progress/lesson/${lessonId}`;
+        if (navigator.sendBeacon) navigator.sendBeacon(url, blob);
+      } catch {}
+    };
+    const visHandler = () => { if (document.visibilityState === 'hidden') handler(); };
 
+    window.addEventListener('beforeunload', handler);
+    document.addEventListener('visibilitychange', visHandler);
+    return () => {
+      window.removeEventListener('beforeunload', handler);
+      document.removeEventListener('visibilitychange', visHandler);
+    };
+  }, [lessonId, currentContentIndex, completedItems, mirrorLocal]);
 
+  // Refresh progress when window regains focus (e.g., returning from quiz)
+  useEffect(() => {
+    const handleFocus = () => {
+      console.log('🎯 WINDOW FOCUS: Window regained focus, refreshing progress...');
+      refreshProgress();
+    };
 
+    console.log('👂 WINDOW FOCUS: Setting up focus event listener');
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      console.log('🧹 WINDOW FOCUS: Cleaning up focus event listener');
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [refreshProgress]);
+
+  // --- actions that should persist immediately (debounced) ---
   const markContentComplete = (contentId) => {
     if (!completedItems.includes(contentId)) {
-      setCompletedItems([...completedItems, contentId]);
+      const next = [...completedItems, contentId];
+      setCompletedItems(next);
+      persistDebounced({
+        timeSpent: timeSpentRef.current || 0,
+        lastPosition: currentContentIndex,
+        completedContentItems: next,
+      });
     }
   };
 
   const handleNextContent = () => {
     if (currentContentIndex < content.length - 1) {
       const currentContent = content[currentContentIndex];
-      markContentComplete(currentContent._id);
-      setCurrentContentIndex(currentContentIndex + 1);
+      if (currentContent) markContentComplete(currentContent._id);
+      const nextIndex = currentContentIndex + 1;
+      setCurrentContentIndex(nextIndex);
+      persistDebounced({
+        timeSpent: timeSpentRef.current || 0,
+        lastPosition: nextIndex,
+        completedContentItems: completedItems,
+      });
     }
   };
 
   const handlePreviousContent = () => {
     if (currentContentIndex > 0) {
-      setCurrentContentIndex(currentContentIndex - 1);
+      const prevIndex = currentContentIndex - 1;
+      setCurrentContentIndex(prevIndex);
+      persistDebounced({
+        timeSpent: timeSpentRef.current || 0,
+        lastPosition: prevIndex,
+        completedContentItems: completedItems,
+      });
     }
   };
 
@@ -173,6 +374,10 @@ const LessonPlayer = () => {
 
       // Send accurate timeSpent to backend
       const result = await LessonProgressAPI.completeLesson(lessonId, finalTimeSpent);
+
+      // clear local snapshot on success
+      try { localStorage.removeItem(lsKey); } catch {}
+
       try {
         const response = await fetch('http://localhost:5000/api/progress/me', {
           headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
@@ -295,6 +500,12 @@ const LessonPlayer = () => {
         );
 
       case 'quiz':
+        console.log('🎯 QUIZ RENDER: Rendering quiz content', {
+          contentId: currentContent._id,
+          quizId: currentContent.quizId,
+          isCompleted: completedItems.includes(currentContent._id),
+          completedItems: completedItems
+        });
         return (
           <div className="lms-content-box text-center">
             <h3>{currentContent.title}</h3>
@@ -302,7 +513,14 @@ const LessonPlayer = () => {
             <Button
               variant="primary"
               size="lg"
-              onClick={() => navigate(`/quiz/${currentContent.quizId}?lessonId=${lessonId}&contentId=${currentContent._id}`)}
+              onClick={() => {
+                console.log('🚀 QUIZ CLICK: Navigating to quiz', {
+                  quizId: currentContent.quizId,
+                  lessonId,
+                  contentId: currentContent._id
+                });
+                navigate(`/quiz/${currentContent.quizId}?lessonId=${lessonId}&contentId=${currentContent._id}`);
+              }}
             >
               Start Quiz
             </Button>
@@ -332,7 +550,15 @@ const LessonPlayer = () => {
     });
   }, [currentContentIndex, currentContentId, content]);
 
-  // quizzes are filtered out so there's nothing to auto-skip
+  // Persist when choosing a content item from the list
+  const onSelectContentIndex = (index) => {
+    setCurrentContentIndex(index);
+    persistDebounced({
+      timeSpent: timeSpentRef.current || 0,
+      lastPosition: index,
+      completedContentItems: completedItems,
+    });
+  };
 
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
@@ -362,6 +588,19 @@ const LessonPlayer = () => {
   const isLastContent = hasNoRenderableContent ? true : currentContentIndex === content.length - 1;
   // Treat quiz-type content with missing quizId as not required for completion
   const allQuizzesCompleted = content.filter(c => c.type === 'quiz').every(c => completedItems.includes(c._id));
+
+  console.log('🎯 LESSON STATE: Completion check', {
+    hasNoRenderableContent,
+    isLastContent,
+    currentContentIndex,
+    totalContent: content.length,
+    allQuizzesCompleted,
+    quizItems: content.filter(c => c.type === 'quiz').map(c => ({
+      id: c._id,
+      completed: completedItems.includes(c._id)
+    })),
+    completedItems
+  });
 
   return (
     <div className="lesson-player-container">
@@ -478,10 +717,7 @@ const LessonPlayer = () => {
                       className={`list-group-item list-group-item-action ${index === currentContentIndex ? 'active' : ''
                         } ${completedItems.includes(item._id) ? 'list-group-item-success' : ''}`}
                       style={{ cursor: 'pointer', fontSize: '0.875rem' }}
-                      onClick={() => {
-                        // quizzes are filtered out earlier, so simply set the index
-                        setCurrentContentIndex(index);
-                      }}
+                      onClick={() => onSelectContentIndex(index)}
                     >
                       <div className="d-flex align-items-center">
                         <span className="me-2">{index + 1}.</span>

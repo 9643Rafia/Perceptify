@@ -126,18 +126,60 @@ const QuizInterface = () => {
 
       // If this is a mini-quiz from a lesson, mark the content as complete
       if (lessonId && contentId && result.passed) {
+        console.log('🎯 QUIZ COMPLETION: Starting lesson progress update', {
+          lessonId,
+          contentId,
+          quizPassed: result.passed,
+          score: result.score
+        });
+
         try {
           // Get current lesson progress to append the completed content
+          console.log('📡 QUIZ COMPLETION: Fetching current lesson progress...');
           const lessonData = await LearningAPI.getLessonById(lessonId);
           const currentCompleted = lessonData.progress?.completedContentItems || [];
+          console.log('📊 QUIZ COMPLETION: Current completed items:', currentCompleted);
+
           if (!currentCompleted.includes(contentId)) {
+            console.log('💾 QUIZ COMPLETION: Updating backend progress...');
             await LessonProgressAPI.updateLessonProgress(lessonId, {
               completedContentItems: [...currentCompleted, contentId]
             });
+            console.log('✅ QUIZ COMPLETION: Backend progress updated successfully');
+          } else {
+            console.log('⚠️ QUIZ COMPLETION: Content already marked as completed');
+          }
+
+          // Also update localStorage for immediate lesson player sync
+          const lsKey = `lesson:${lessonId}`;
+          console.log('💽 QUIZ COMPLETION: Updating lesson localStorage...', { lsKey });
+
+          try {
+            const existing = localStorage.getItem(lsKey);
+            let localData = existing ? JSON.parse(existing) : {};
+            console.log('📈 QUIZ COMPLETION: Current localStorage data:', localData);
+
+            if (!localData.completedContentItems) localData.completedContentItems = [];
+            if (!localData.completedContentItems.includes(contentId)) {
+              localData.completedContentItems = [...localData.completedContentItems, contentId];
+              localData.t = Date.now();
+              localStorage.setItem(lsKey, JSON.stringify(localData));
+              console.log('✅ QUIZ COMPLETION: localStorage updated successfully:', localData);
+            } else {
+              console.log('⚠️ QUIZ COMPLETION: Content already in localStorage');
+            }
+          } catch (localErr) {
+            console.error('❌ QUIZ COMPLETION: Failed to update lesson localStorage:', localErr);
           }
         } catch (progressErr) {
-          console.warn('Failed to update lesson progress after quiz completion:', progressErr);
+          console.error('❌ QUIZ COMPLETION: Failed to update lesson progress:', progressErr);
         }
+      } else {
+        console.log('🚫 QUIZ COMPLETION: Skipping lesson update', {
+          hasLessonId: !!lessonId,
+          hasContentId: !!contentId,
+          quizPassed: result.passed
+        });
       }
 
       setResults(result);

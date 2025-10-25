@@ -9,7 +9,7 @@ const LessonProgressAPI = {
   },
 
   async updateLessonProgress(lessonId, data) {
-    const response = await api.put(`/progress/lesson/${lessonId}/update`, data);
+    const response = await api.patch(`/progress/lesson/${lessonId}/progress`, data);
     return response.data;
   },
 
