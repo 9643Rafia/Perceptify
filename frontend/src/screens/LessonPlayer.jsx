@@ -17,7 +17,6 @@ const LessonPlayer = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
-  const [timeSpent, setTimeSpent] = useState(0);
   const [completedItems, setCompletedItems] = useState([]);
   const timerRef = useRef(null);
   const saveIntervalRef = useRef(null);
@@ -150,7 +149,6 @@ const LessonPlayer = () => {
         setContent(data.content || []);
 
         if (data.progress) {
-          setTimeSpent(data.progress.timeSpent || 0);
           timeSpentRef.current = data.progress.timeSpent || 0;
           setCompletedItems(data.progress.completedContentItems || []);
         }
@@ -180,11 +178,13 @@ const LessonPlayer = () => {
   // Keep a fresh copy of auto-save function (refs avoid re-renders)
   useEffect(() => {
     autoSaveRef.current = async () => {
-      if (!lesson || timeSpentRef.current === 0) return;
+      if (!lesson) return;
+      // Always use latest timer value for timeSpent
+      const latestTimeSpent = timeSpentRef.current;
       try {
         setSaving(true);
         await LessonProgressAPI.updateLessonProgress(lessonId, {
-          timeSpent: timeSpentRef.current,
+          timeSpent: latestTimeSpent,
           lastPosition: currentContentIndex,
           completedContentItems: completedItems,
         });
@@ -273,11 +273,11 @@ const LessonPlayer = () => {
       // Guard: content may be empty (we filtered out quizzes), so only mark if present
       if (currentContent) markContentComplete(currentContent._id);
 
-      // No confirmation: complete lesson immediately even if some items are incomplete
+      // Sync timeSpent state and ref to latest timer value
+      const finalTimeSpent = timeSpentRef.current;
 
-      // Request server to skip quiz/module-level requirements when completing
-      // By default do not skip quizzes — let the backend enforce quiz requirements.
-      const result = await LessonProgressAPI.completeLesson(lessonId, timeSpent);
+      // Send accurate timeSpent to backend
+      const result = await LessonProgressAPI.completeLesson(lessonId, finalTimeSpent);
       try {
         const response = await fetch('http://localhost:5000/api/progress/me', {
           headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
