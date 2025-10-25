@@ -1,8 +1,59 @@
+const mongoose = require('mongoose');
 const Quiz = require('../models/quiz.model');
 const Lab = require('../models/lab.model');
 const Progress = require('../models/progress.model');
 const Module = require('../models/module.model');
 const Lesson = require('../models/lesson.model');
+
+// ---------- helpers ----------
+const isObjectId = (v) => mongoose.Types.ObjectId.isValid(String(v));
+
+/**
+ * Find a Module document from a variety of possible identifiers:
+ * - ObjectId (_id)
+ * - moduleId (e.g., "module_1.1", "MOD-1.1")
+ * - slug (if present in your schema)
+ */
+async function findModuleFlexible(ref) {
+  if (!ref) return null;
+
+  const raw = String(ref);
+
+  // Try ObjectId direct
+  if (isObjectId(raw)) {
+    const byId = await Module.findById(raw);
+    if (byId) return byId;
+  }
+
+  // Try exact moduleId
+  let m = await Module.findOne({ moduleId: raw });
+  if (m) return m;
+
+  // Try normalized ("MOD-1.1" -> "module_1.1")
+  const normalized = raw
+    .toLowerCase()
+    .replace(/^mod[-_]?/i, 'module_')
+    .replace(/-/g, '_');
+  if (normalized !== raw) {
+    m = await Module.findOne({ moduleId: normalized });
+    if (m) return m;
+  }
+
+  // Try slug (if you have it)
+  m = await Module.findOne({ slug: raw });
+  if (m) return m;
+
+  // As a last attempt, if raw *looks* like ObjectId but failed findById (e.g. stored as string in moduleId)
+  if (isObjectId(raw)) {
+    m = await Module.findOne({ moduleId: raw });
+    if (m) return m;
+  }
+
+  return null;
+}
+
+/** String compare helper for ObjectId/string mixes */
+const eqId = (a, b) => String(a) === String(b);
 
 // ========== QUIZ CONTROLLERS ==========
 
@@ -10,65 +61,66 @@ const Lesson = require('../models/lesson.model');
 exports.getQuizById = async (req, res) => {
   try {
     const { quizId } = req.params;
-
     const quiz = await Quiz.findOne({ quizId, status: 'active' });
 
     if (!quiz) {
       return res.status(404).json({ message: 'Quiz not found' });
     }
 
-    // Remove correct answers from response
+    // Prepare quiz payload without correct answers
     const quizData = quiz.toObject();
-    quizData.questions = quizData.questions.map(q => {
+    quizData.questions = quizData.questions.map((q) => {
       const question = { ...q };
-
       if (question.questionType !== 'short_answer') {
-        question.options = question.options.map(opt => ({
+        question.options = question.options.map((opt) => ({
           optionId: opt.optionId,
-          text: opt.text
+          text: opt.text,
         }));
       }
-
       delete question.correctAnswer;
-      // Keep explanation but don't send it until after submission
       question.explanation = undefined;
-
       return question;
     });
 
-    // Get user's previous attempts (only for module quizzes)
+    // Previous attempts only matter for module quizzes
     let previousAttempts = [];
-    let attemptsRemaining = -1; // Unlimited for content quizzes by default
+    let attemptsRemaining = -1;
 
     if (req.user && quiz.moduleId) {
       const progress = await Progress.findOne({ userId: req.user._id });
       if (progress) {
-        const module = await Module.findOne({ moduleId: quiz.moduleId });
+        const module = await findModuleFlexible(quiz.moduleId);
         if (module) {
-          const trackProgress = progress.tracksProgress.find(tp => tp.trackId === module.trackId);
+          // match trackProgress by trackId safely
+          const trackProgress =
+            progress.tracksProgress?.find((tp) => eqId(tp.trackId, module.trackId)) || null;
+
           if (trackProgress) {
-            const moduleProgress = trackProgress.modulesProgress.find(mp => mp.moduleId === module._id);
+            const moduleProgress =
+              trackProgress.modulesProgress?.find((mp) => eqId(mp.moduleId, module._id)) || null;
+
             if (moduleProgress) {
-              previousAttempts = moduleProgress.quizAttempts.map(qa => ({
-                attemptNumber: qa.attemptNumber,
-                score: qa.score,
-                passed: qa.passed,
-                completedAt: qa.completedAt
-              }));
-              attemptsRemaining = quiz.attempts === -1 ? -1 : quiz.attempts - previousAttempts.length;
+              previousAttempts =
+                moduleProgress.quizAttempts?.map((qa) => ({
+                  attemptNumber: qa.attemptNumber,
+                  score: qa.score,
+                  passed: qa.passed,
+                  completedAt: qa.completedAt,
+                })) || [];
+              attemptsRemaining =
+                quiz.attempts === -1 ? -1 : Math.max(0, quiz.attempts - previousAttempts.length);
             }
           }
         }
       }
     } else {
-      // For content quizzes, allow unlimited attempts
-      attemptsRemaining = -1;
+      attemptsRemaining = -1; // lesson mini-quiz, unlimited
     }
 
     res.json({
       quiz: quizData,
       previousAttempts,
-      attemptsRemaining
+      attemptsRemaining,
     });
   } catch (error) {
     console.error('Error fetching quiz:', error);
@@ -84,105 +136,120 @@ exports.submitQuiz = async (req, res) => {
     const userId = req.user._id;
 
     const quiz = await Quiz.findOne({ quizId, status: 'active' });
-
     if (!quiz) {
       return res.status(404).json({ message: 'Quiz not found' });
     }
 
-    // Get progress
+    // Ensure Progress exists
     let progress = await Progress.findOne({ userId });
-
     if (!progress) {
       progress = new Progress({ userId });
     }
 
+    // Module quiz vs lesson mini-quiz
+    const isModuleQuiz = !!quiz.moduleId;
     let moduleProgress = null;
-    let isModuleQuiz = !!quiz.moduleId;
 
     if (isModuleQuiz) {
-      // Find the right track and module progress for module quizzes
-      const module = await Module.findOne({ moduleId: quiz.moduleId });
+      const module = await findModuleFlexible(quiz.moduleId);
       if (!module) {
         return res.status(404).json({ message: 'Module not found' });
       }
 
-      let trackProgress = progress.tracksProgress.find(tp => tp.trackId === module.trackId);
+      // Find matching trackProgress (trackId is usually an ObjectId)
+      const trackProgress =
+        progress.tracksProgress?.find((tp) => eqId(tp.trackId, module.trackId)) || null;
       if (!trackProgress) {
         return res.status(400).json({ message: 'You must start the track first' });
       }
 
-      moduleProgress = trackProgress.modulesProgress.find(mp => mp.moduleId === module._id);
+      // Find moduleProgress by module._id (not module.moduleId)
+      moduleProgress =
+        trackProgress.modulesProgress?.find((mp) => eqId(mp.moduleId, module._id)) || null;
       if (!moduleProgress) {
         return res.status(400).json({ message: 'You must start the module first' });
       }
 
-      // Check attempts remaining
-      if (quiz.attempts !== -1 && moduleProgress.quizAttempts.length >= quiz.attempts) {
-        return res.status(400).json({ message: 'No more attempts remaining' });
+      // Check attempts
+      if (quiz.attempts !== -1) {
+        const used = moduleProgress.quizAttempts?.length || 0;
+        if (used >= quiz.attempts) {
+          return res.status(400).json({ message: 'No more attempts remaining' });
+        }
       }
     }
 
-    // Grade the quiz
+    // Grade quiz
     let totalPoints = 0;
     let earnedPoints = 0;
     const gradedAnswers = [];
 
-    quiz.questions.forEach(question => {
+    quiz.questions.forEach((question) => {
       totalPoints += question.points;
-
-      const userAnswer = answers.find(a => a.questionId === question.questionId);
+      const userAnswer = answers.find((a) => a.questionId === question.questionId);
       let isCorrect = false;
 
       if (question.questionType === 'multiple_choice' || question.questionType === 'true_false') {
-        const correctOption = question.options.find(opt => opt.isCorrect);
-        isCorrect = userAnswer && userAnswer.selectedAnswer === correctOption.optionId;
+        const correctOption = question.options.find((opt) => opt.isCorrect);
+        isCorrect = !!(userAnswer && userAnswer.selectedAnswer === correctOption?.optionId);
       } else if (question.questionType === 'multiple_select') {
-        const correctOptions = question.options.filter(opt => opt.isCorrect).map(opt => opt.optionId);
-        const userOptions = userAnswer ? userAnswer.selectedAnswer.sort() : [];
-        isCorrect = JSON.stringify(correctOptions.sort()) === JSON.stringify(userOptions);
+        const correctOptions = question.options
+          .filter((opt) => opt.isCorrect)
+          .map((opt) => opt.optionId)
+          .sort();
+        const userOptions = (userAnswer ? userAnswer.selectedAnswer : []).slice().sort();
+        isCorrect = JSON.stringify(correctOptions) === JSON.stringify(userOptions);
       } else if (question.questionType === 'short_answer') {
-        // Simple case-insensitive comparison
-        isCorrect = userAnswer && userAnswer.selectedAnswer.trim().toLowerCase() === question.correctAnswer.trim().toLowerCase();
+        isCorrect =
+          !!userAnswer &&
+          String(userAnswer.selectedAnswer || '').trim().toLowerCase() ===
+            String(question.correctAnswer || '').trim().toLowerCase();
       }
 
-      if (isCorrect) {
-        earnedPoints += question.points;
-      }
+      if (isCorrect) earnedPoints += question.points;
 
       gradedAnswers.push({
         questionId: question.questionId,
         selectedAnswer: userAnswer ? userAnswer.selectedAnswer : null,
         isCorrect,
-        markedForReview: userAnswer ? userAnswer.markedForReview : false,
+        markedForReview: userAnswer ? !!userAnswer.markedForReview : false,
         explanation: question.explanation,
-        correctAnswer: question.questionType === 'short_answer' ? question.correctAnswer : question.options.filter(opt => opt.isCorrect).map(opt => opt.optionId)
+        correctAnswer:
+          question.questionType === 'short_answer'
+            ? question.correctAnswer
+            : question.options.filter((opt) => opt.isCorrect).map((opt) => opt.optionId),
       });
     });
 
-    const score = Math.round((earnedPoints / totalPoints) * 100);
+    const score = totalPoints > 0 ? Math.round((earnedPoints / totalPoints) * 100) : 0;
     const passed = score >= quiz.passingScore;
 
-    // Record the attempt (only for module quizzes)
+    // Record attempt only for module quizzes
     let attemptNumber = 1;
     if (isModuleQuiz && moduleProgress) {
-      attemptNumber = moduleProgress.quizAttempts.length + 1;
+      const used = moduleProgress.quizAttempts?.length || 0;
+      attemptNumber = used + 1;
+
       moduleProgress.quizAttempts.push({
         attemptNumber,
         score,
         passed,
         answers: gradedAnswers,
         timeSpent,
-        completedAt: new Date()
+        completedAt: new Date(),
       });
 
-      // Update best score
+      // Best score
+      if (typeof moduleProgress.bestQuizScore !== 'number') moduleProgress.bestQuizScore = 0;
       if (score > moduleProgress.bestQuizScore) {
         moduleProgress.bestQuizScore = score;
       }
 
-      // Mark module as completed if all lessons and quiz are done
+      // Mark module completed if all lessons completed and quiz passed
       if (passed) {
-        const allLessonsCompleted = moduleProgress.lessonsProgress.every(lp => lp.status === 'completed');
+        const allLessonsCompleted = (moduleProgress.lessonsProgress || []).every(
+          (lp) => lp.status === 'completed'
+        );
         if (allLessonsCompleted && moduleProgress.status !== 'completed') {
           moduleProgress.status = 'completed';
           moduleProgress.completedAt = new Date();
@@ -190,19 +257,22 @@ exports.submitQuiz = async (req, res) => {
       }
     }
 
-    // Award XP if passed
+    // Award XP if passed (both module quiz and content quiz)
     let xpEarned = 0;
     let leveledUp = false;
     if (passed) {
-      // Award XP based on score (max 100 XP per quiz)
-      xpEarned = Math.round(score);
-      leveledUp = progress.addXP(xpEarned);
+      xpEarned = Math.round(score); // same rule you already used
+      if (typeof progress.addXP === 'function') {
+        leveledUp = !!progress.addXP(xpEarned);
+      }
     }
 
-    // Update streak and activity
-    progress.updateStreak();
+    // Update streak & save
+    if (typeof progress.updateStreak === 'function') progress.updateStreak();
     progress.lastActivityAt = new Date();
 
+    // markModified not usually needed unless nested arrays are mixed types, but safe:
+    progress.markModified('tracksProgress');
     await progress.save();
 
     res.json({
@@ -211,13 +281,16 @@ exports.submitQuiz = async (req, res) => {
       passed,
       answers: gradedAnswers,
       attemptNumber,
-      attemptsRemaining: isModuleQuiz ? (quiz.attempts === -1 ? -1 : quiz.attempts - attemptNumber) : -1, // Unlimited for content quizzes
+      attemptsRemaining: isModuleQuiz
+        ? quiz.attempts === -1
+          ? -1
+          : Math.max(0, quiz.attempts - attemptNumber)
+        : -1,
       xpEarned,
       leveledUp,
       totalXP: progress.totalXP,
-      level: progress.level
+      level: progress.level,
     });
-
   } catch (error) {
     console.error('Error submitting quiz:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -226,20 +299,17 @@ exports.submitQuiz = async (req, res) => {
 
 // ========== LAB CONTROLLERS ==========
 
-// Get lab by ID
 exports.getLabById = async (req, res) => {
   try {
     const { labId } = req.params;
-
     const lab = await Lab.findOne({ labId, status: 'active' });
 
     if (!lab) {
       return res.status(404).json({ message: 'Lab not found' });
     }
 
-    // Remove correct answers from challenges
     const labData = lab.toObject();
-    labData.challenges = labData.challenges.map(c => ({
+    labData.challenges = labData.challenges.map((c) => ({
       challengeId: c.challengeId,
       title: c.title,
       description: c.description,
@@ -247,28 +317,31 @@ exports.getLabById = async (req, res) => {
       mediaType: c.mediaType,
       difficulty: c.difficulty,
       points: c.points,
-      order: c.order
+      order: c.order,
     }));
 
-    // Get user's previous attempts
     let previousAttempts = [];
-    if (req.user) {
+    if (req.user && lab.moduleId) {
       const progress = await Progress.findOne({ userId: req.user._id });
-      if (progress && lab.moduleId) {
+      if (progress) {
+        // lab.moduleId is usually an ObjectId
         const module = await Module.findOne({ _id: lab.moduleId });
         if (module) {
-          const trackProgress = progress.tracksProgress.find(tp => tp.trackId === module.trackId);
+          const trackProgress =
+            progress.tracksProgress?.find((tp) => eqId(tp.trackId, module.trackId)) || null;
           if (trackProgress) {
-            const moduleProgress = trackProgress.modulesProgress.find(mp => mp.moduleId === module._id);
+            const moduleProgress =
+              trackProgress.modulesProgress?.find((mp) => eqId(mp.moduleId, module._id)) || null;
             if (moduleProgress) {
-              previousAttempts = moduleProgress.labAttempts
-                .filter(la => la.labId === labId)
-                .map(la => ({
-                  attemptNumber: la.attemptNumber,
-                  score: la.score,
-                  passed: la.passed,
-                  completedAt: la.completedAt
-                }));
+              previousAttempts =
+                moduleProgress.labAttempts
+                  ?.filter((la) => la.labId === labId)
+                  .map((la) => ({
+                    attemptNumber: la.attemptNumber,
+                    score: la.score,
+                    passed: la.passed,
+                    completedAt: la.completedAt,
+                  })) || [];
             }
           }
         }
@@ -278,7 +351,7 @@ exports.getLabById = async (req, res) => {
     res.json({
       lab: labData,
       previousAttempts,
-      attemptsRemaining: lab.attempts === -1 ? -1 : lab.attempts - previousAttempts.length
+      attemptsRemaining: lab.attempts === -1 ? -1 : lab.attempts - previousAttempts.length,
     });
   } catch (error) {
     console.error('Error fetching lab:', error);
@@ -286,65 +359,57 @@ exports.getLabById = async (req, res) => {
   }
 };
 
-// Submit lab
 exports.submitLab = async (req, res) => {
   try {
     const { labId } = req.params;
-    const { responses } = req.body; // Array of { challengeId, verdict, reasoning, timeSpent }
+    const { responses } = req.body;
     const userId = req.user._id;
 
     const lab = await Lab.findOne({ labId, status: 'active' });
-
     if (!lab) {
       return res.status(404).json({ message: 'Lab not found' });
     }
 
-    // Get progress
     let progress = await Progress.findOne({ userId });
+    if (!progress) progress = new Progress({ userId });
 
-    if (!progress) {
-      progress = new Progress({ userId });
-    }
-
-    // Find the right track and module progress
     const module = await Module.findOne({ _id: lab.moduleId });
     if (!module) {
       return res.status(404).json({ message: 'Module not found' });
     }
 
-    let trackProgress = progress.tracksProgress.find(tp => tp.trackId === module.trackId);
+    const trackProgress =
+      progress.tracksProgress?.find((tp) => eqId(tp.trackId, module.trackId)) || null;
     if (!trackProgress) {
       return res.status(400).json({ message: 'You must start the track first' });
     }
 
-    let moduleProgress = trackProgress.modulesProgress.find(mp => mp.moduleId === module._id);
+    const moduleProgress =
+      trackProgress.modulesProgress?.find((mp) => eqId(mp.moduleId, module._id)) || null;
     if (!moduleProgress) {
       return res.status(400).json({ message: 'You must start the module first' });
     }
 
-    // Check attempts remaining
-    const previousAttempts = moduleProgress.labAttempts.filter(la => la.labId === labId);
+    const previousAttempts = (moduleProgress.labAttempts || []).filter((la) => la.labId === labId);
     if (lab.attempts !== -1 && previousAttempts.length >= lab.attempts) {
       return res.status(400).json({ message: 'No more attempts remaining' });
     }
 
-    // Grade the lab
+    // Grade lab
     let totalPoints = 0;
     let earnedPoints = 0;
     const gradedResponses = [];
 
-    lab.challenges.forEach(challenge => {
+    lab.challenges.forEach((challenge) => {
       totalPoints += challenge.points;
 
-      const userResponse = responses.find(r => r.challengeId === challenge.challengeId);
-      const isCorrect = userResponse && (
-        (challenge.isDeepfake && userResponse.verdict === 'fake') ||
-        (!challenge.isDeepfake && userResponse.verdict === 'real')
-      );
+      const userResponse = responses.find((r) => r.challengeId === challenge.challengeId);
+      const isCorrect =
+        !!userResponse &&
+        ((challenge.isDeepfake && userResponse.verdict === 'fake') ||
+          (!challenge.isDeepfake && userResponse.verdict === 'real'));
 
-      if (isCorrect) {
-        earnedPoints += challenge.points;
-      }
+      if (isCorrect) earnedPoints += challenge.points;
 
       gradedResponses.push({
         challengeId: challenge.challengeId,
@@ -353,14 +418,13 @@ exports.submitLab = async (req, res) => {
         isCorrect,
         timeSpent: userResponse ? userResponse.timeSpent : 0,
         correctAnswer: challenge.isDeepfake ? 'fake' : 'real',
-        artifacts: challenge.artifacts
+        artifacts: challenge.artifacts,
       });
     });
 
-    const score = Math.round((earnedPoints / totalPoints) * 100);
+    const score = totalPoints > 0 ? Math.round((earnedPoints / totalPoints) * 100) : 0;
     const passed = score >= lab.passingScore;
 
-    // Record the attempt
     const attemptNumber = previousAttempts.length + 1;
     moduleProgress.labAttempts.push({
       labId,
@@ -368,33 +432,30 @@ exports.submitLab = async (req, res) => {
       score,
       passed,
       responses: gradedResponses,
-      completedAt: new Date()
+      completedAt: new Date(),
     });
 
-    // Update best lab score
+    if (typeof moduleProgress.bestLabScore !== 'number') moduleProgress.bestLabScore = 0;
     if (score > moduleProgress.bestLabScore) {
       moduleProgress.bestLabScore = score;
     }
 
-    // Award XP if passed
     let xpEarned = 0;
     let leveledUp = false;
     if (passed) {
-      // Award XP based on score and difficulty
-      xpEarned = Math.round(score * 1.5); // Labs give more XP
-      leveledUp = progress.addXP(xpEarned);
-
-      // Mark module as completed if required
+      xpEarned = Math.round(score * 1.5);
+      if (typeof progress.addXP === 'function') {
+        leveledUp = !!progress.addXP(xpEarned);
+      }
       if (module.requiresLabCompletion && moduleProgress.status !== 'completed') {
         moduleProgress.status = 'completed';
         moduleProgress.completedAt = new Date();
       }
     }
 
-    // Update streak
-    progress.updateStreak();
+    if (typeof progress.updateStreak === 'function') progress.updateStreak();
     progress.lastActivityAt = new Date();
-
+    progress.markModified('tracksProgress');
     await progress.save();
 
     res.json({
@@ -407,9 +468,8 @@ exports.submitLab = async (req, res) => {
       xpEarned,
       leveledUp,
       totalXP: progress.totalXP,
-      level: progress.level
+      level: progress.level,
     });
-
   } catch (error) {
     console.error('Error submitting lab:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
