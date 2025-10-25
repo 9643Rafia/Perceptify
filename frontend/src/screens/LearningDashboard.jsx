@@ -20,6 +20,18 @@ const LearningDashboard = () => {
     fetchDashboardData();
   }, []);
 
+  useEffect(() => {
+    const handleFocus = () => {
+      fetchDashboardData();
+    };
+
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, []);
+
   const fetchDashboardData = async () => {
     try {
       setLoading(true);

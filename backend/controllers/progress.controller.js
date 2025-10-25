@@ -11,24 +11,45 @@ exports.getUserProgress = async (req, res) => {
   }
 };
 
-// ✅ Update lesson progress (autosave)
 exports.updateLessonProgress = async (req, res) => {
   try {
     const { lessonId } = req.params;
     const { timeSpent, lastPosition, completedContentItems } = req.body;
-    const userId = req.user.id;
+    const userId = req.user.id; // ✅ you confirmed .id is correct
 
     const { progress, lessonProgress } = await ensureLessonProgress(userId, lessonId);
 
-    if (timeSpent) {
-      lessonProgress.timeSpent = timeSpent;
-      progress.totalTimeSpent += timeSpent;
-    }
-    if (lastPosition) lessonProgress.lastPosition = lastPosition;
-    if (completedContentItems) lessonProgress.completedContentItems = completedContentItems;
+    // --- TIME (absolute total per lesson) ---
+    if (typeof timeSpent === 'number' && !Number.isNaN(timeSpent)) {
+      const reported = Math.max(0, Math.floor(timeSpent));
+      const prev = Math.max(0, Math.floor(Number(lessonProgress.timeSpent || 0)));
+      const next = Math.max(prev, reported);           // keep the max (absolute total)
 
+      // delta to add to top-level only if total increased
+      const delta = next - prev;
+      lessonProgress.timeSpent = next;
+      if (delta > 0) {
+        progress.totalTimeSpent = Math.max(0, Number(progress.totalTimeSpent || 0)) + delta;
+      }
+    }
+
+    // --- POSITION (allow 0) ---
+    if (typeof lastPosition === 'number' && !Number.isNaN(lastPosition)) {
+      lessonProgress.lastPosition = lastPosition;
+    }
+
+    // --- COMPLETED CONTENT (merge uniquely) ---
+    if (Array.isArray(completedContentItems)) {
+      const current = Array.isArray(lessonProgress.completedContentItems)
+        ? lessonProgress.completedContentItems
+        : [];
+      const merged = Array.from(new Set([...current, ...completedContentItems]));
+      lessonProgress.completedContentItems = merged;
+    }
+
+    // --- META / SAVE ---
     progress.lastActivityAt = new Date();
-    progress.updateStreak();
+    progress.updateStreak?.(); // safe call if method exists
     progress.markModified('tracksProgress');
     await progress.save();
 
@@ -39,33 +60,42 @@ exports.updateLessonProgress = async (req, res) => {
   }
 };
 
-// ✅ Complete lesson
 exports.completeLesson = async (req, res) => {
   try {
     const { lessonId } = req.params;
     const { timeSpent } = req.body;
     const userId = req.user.id;
 
-    const { progress, lessonProgress, moduleProgress, module, lesson } = await ensureLessonProgress(userId, lessonId);
+    const { progress, lessonProgress, moduleProgress, module, lesson } =
+      await ensureLessonProgress(userId, lessonId);
 
-    // Mark complete
+    // --- Mark complete ---
     lessonProgress.status = 'completed';
     lessonProgress.completedAt = new Date();
-    if (timeSpent) {
-      lessonProgress.timeSpent = timeSpent;
-      progress.totalTimeSpent += timeSpent;
+
+    // --- TIME (absolute total per lesson with delta to top-level) ---
+    if (typeof timeSpent === 'number' && !Number.isNaN(timeSpent)) {
+      const reported = Math.max(0, Math.floor(timeSpent));
+      const prev = Math.max(0, Math.floor(Number(lessonProgress.timeSpent || 0)));
+      const next = Math.max(prev, reported);
+      const delta = next - prev;
+      lessonProgress.timeSpent = next;
+      if (delta > 0) {
+        progress.totalTimeSpent = Math.max(0, Number(progress.totalTimeSpent || 0)) + delta;
+      }
     }
 
-    // Award XP
+    // --- Award XP ---
     const xpEarned = 50;
-    const leveledUp = progress.addXP(xpEarned);
+    const leveledUp = typeof progress.addXP === 'function' ? progress.addXP(xpEarned) : false;
 
-    // Unlock next items
+    // --- Unlock next items ---
     const nextLesson = await unlockNextLesson(progress, module, lesson, moduleProgress);
     const nextModule = await unlockNextModule(progress, module, moduleProgress);
 
+    // --- Save ---
     progress.lastActivityAt = new Date();
-    progress.updateStreak();
+    progress.updateStreak?.();
     progress.markModified('tracksProgress');
     await progress.save();
 
@@ -84,3 +114,4 @@ exports.completeLesson = async (req, res) => {
     res.status(500).json({ message: err.message || 'Server error' });
   }
 };
+
