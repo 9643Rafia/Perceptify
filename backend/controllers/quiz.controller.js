@@ -36,11 +36,13 @@ exports.getQuizById = async (req, res) => {
       return question;
     });
 
-    // Get user's previous attempts
+    // Get user's previous attempts (only for module quizzes)
     let previousAttempts = [];
-    if (req.user) {
+    let attemptsRemaining = -1; // Unlimited for content quizzes by default
+
+    if (req.user && quiz.moduleId) {
       const progress = await Progress.findOne({ userId: req.user._id });
-      if (progress && quiz.moduleId) {
+      if (progress) {
         const module = await Module.findOne({ moduleId: quiz.moduleId });
         if (module) {
           const trackProgress = progress.tracksProgress.find(tp => tp.trackId === module.trackId);
@@ -53,16 +55,20 @@ exports.getQuizById = async (req, res) => {
                 passed: qa.passed,
                 completedAt: qa.completedAt
               }));
+              attemptsRemaining = quiz.attempts === -1 ? -1 : quiz.attempts - previousAttempts.length;
             }
           }
         }
       }
+    } else {
+      // For content quizzes, allow unlimited attempts
+      attemptsRemaining = -1;
     }
 
     res.json({
       quiz: quizData,
       previousAttempts,
-      attemptsRemaining: quiz.attempts === -1 ? -1 : quiz.attempts - previousAttempts.length
+      attemptsRemaining
     });
   } catch (error) {
     console.error('Error fetching quiz:', error);
@@ -90,25 +96,30 @@ exports.submitQuiz = async (req, res) => {
       progress = new Progress({ userId });
     }
 
-    // Find the right track and module progress
-    const module = await Module.findOne({ moduleId: quiz.moduleId });
-    if (!module) {
-      return res.status(404).json({ message: 'Module not found' });
-    }
+    let moduleProgress = null;
+    let isModuleQuiz = !!quiz.moduleId;
 
-    let trackProgress = progress.tracksProgress.find(tp => tp.trackId === module.trackId);
-    if (!trackProgress) {
-      return res.status(400).json({ message: 'You must start the track first' });
-    }
+    if (isModuleQuiz) {
+      // Find the right track and module progress for module quizzes
+      const module = await Module.findOne({ moduleId: quiz.moduleId });
+      if (!module) {
+        return res.status(404).json({ message: 'Module not found' });
+      }
 
-    let moduleProgress = trackProgress.modulesProgress.find(mp => mp.moduleId === module._id);
-    if (!moduleProgress) {
-      return res.status(400).json({ message: 'You must start the module first' });
-    }
+      let trackProgress = progress.tracksProgress.find(tp => tp.trackId === module.trackId);
+      if (!trackProgress) {
+        return res.status(400).json({ message: 'You must start the track first' });
+      }
 
-    // Check attempts remaining
-    if (quiz.attempts !== -1 && moduleProgress.quizAttempts.length >= quiz.attempts) {
-      return res.status(400).json({ message: 'No more attempts remaining' });
+      moduleProgress = trackProgress.modulesProgress.find(mp => mp.moduleId === module._id);
+      if (!moduleProgress) {
+        return res.status(400).json({ message: 'You must start the module first' });
+      }
+
+      // Check attempts remaining
+      if (quiz.attempts !== -1 && moduleProgress.quizAttempts.length >= quiz.attempts) {
+        return res.status(400).json({ message: 'No more attempts remaining' });
+      }
     }
 
     // Grade the quiz
@@ -151,20 +162,32 @@ exports.submitQuiz = async (req, res) => {
     const score = Math.round((earnedPoints / totalPoints) * 100);
     const passed = score >= quiz.passingScore;
 
-    // Record the attempt
-    const attemptNumber = moduleProgress.quizAttempts.length + 1;
-    moduleProgress.quizAttempts.push({
-      attemptNumber,
-      score,
-      passed,
-      answers: gradedAnswers,
-      timeSpent,
-      completedAt: new Date()
-    });
+    // Record the attempt (only for module quizzes)
+    let attemptNumber = 1;
+    if (isModuleQuiz && moduleProgress) {
+      attemptNumber = moduleProgress.quizAttempts.length + 1;
+      moduleProgress.quizAttempts.push({
+        attemptNumber,
+        score,
+        passed,
+        answers: gradedAnswers,
+        timeSpent,
+        completedAt: new Date()
+      });
 
-    // Update best score
-    if (score > moduleProgress.bestQuizScore) {
-      moduleProgress.bestQuizScore = score;
+      // Update best score
+      if (score > moduleProgress.bestQuizScore) {
+        moduleProgress.bestQuizScore = score;
+      }
+
+      // Mark module as completed if all lessons and quiz are done
+      if (passed) {
+        const allLessonsCompleted = moduleProgress.lessonsProgress.every(lp => lp.status === 'completed');
+        if (allLessonsCompleted && moduleProgress.status !== 'completed') {
+          moduleProgress.status = 'completed';
+          moduleProgress.completedAt = new Date();
+        }
+      }
     }
 
     // Award XP if passed
@@ -174,16 +197,9 @@ exports.submitQuiz = async (req, res) => {
       // Award XP based on score (max 100 XP per quiz)
       xpEarned = Math.round(score);
       leveledUp = progress.addXP(xpEarned);
-
-      // Mark module as completed if all lessons and quiz are done
-      const allLessonsCompleted = moduleProgress.lessonsProgress.every(lp => lp.status === 'completed');
-      if (allLessonsCompleted && moduleProgress.status !== 'completed') {
-        moduleProgress.status = 'completed';
-        moduleProgress.completedAt = new Date();
-      }
     }
 
-    // Update streak
+    // Update streak and activity
     progress.updateStreak();
     progress.lastActivityAt = new Date();
 
@@ -195,7 +211,7 @@ exports.submitQuiz = async (req, res) => {
       passed,
       answers: gradedAnswers,
       attemptNumber,
-      attemptsRemaining: quiz.attempts === -1 ? -1 : quiz.attempts - attemptNumber,
+      attemptsRemaining: isModuleQuiz ? (quiz.attempts === -1 ? -1 : quiz.attempts - attemptNumber) : -1, // Unlimited for content quizzes
       xpEarned,
       leveledUp,
       totalXP: progress.totalXP,
