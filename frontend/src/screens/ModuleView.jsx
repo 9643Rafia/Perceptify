@@ -16,49 +16,119 @@ const ModuleView = () => {
 
   useEffect(() => {
     let mounted = true;
-    (async () => {
+
+    const loadModule = async () => {
       try {
         setLoading(true);
+
+        // 1️⃣ Fetch module data from backend
         const data = await LearningAPI.getModuleById(moduleId);
         if (!mounted) return;
+
+        // 2️⃣ Update local state
         setModule(data.module);
         setLessons(data.lessons);
         setModuleProgress(data.progress);
+        try {
+          const stored = JSON.parse(localStorage.getItem('progress') || '{}');
+          if (stored?.tracksProgress?.length) {
+            const track = stored.tracksProgress.find(t =>
+              t.modulesProgress.some(m => m.moduleId === moduleId)
+            );
+            if (track) {
+              const mod = track.modulesProgress.find(m => m.moduleId === moduleId);
+              if (mod?.lessonsProgress?.length) {
+                console.log('🧠 Merging lessonsProgress from localStorage');
+                setModuleProgress(prev => ({
+                  ...prev,
+                  lessonsProgress: mod.lessonsProgress
+                }));
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('Failed to merge local progress', e);
+        }
+        const stored = JSON.parse(localStorage.getItem('progress') || '{}');
+        if (stored?.tracksProgress) {
+          const track = stored.tracksProgress.find(t =>
+            t.modulesProgress.some(m => String(m.moduleId) === String(moduleId))
+          );
+
+          if (track) {
+            const mod = track.modulesProgress.find(
+              m => String(m.moduleId) === String(moduleId)
+            );
+
+            if (mod?.lessonsProgress?.length) {
+              console.log('🧩 Using lessonsProgress from localStorage');
+              setModuleProgress(prev => ({
+                ...prev,
+                lessonsProgress: mod.lessonsProgress,
+              }));
+            }
+          }
+        }
+        const track = stored.tracksProgress?.find(t =>
+          t.modulesProgress.some(m => m.moduleId === moduleId)
+        );
+
+        if (track) {
+          const mod = track.modulesProgress.find(m => m.moduleId === moduleId);
+          if (mod && mod.lessonsProgress?.length) {
+            setModuleProgress(prev => ({
+              ...prev,
+              lessonsProgress: mod.lessonsProgress
+            }));
+          }
+        }
       } catch (err) {
+        console.error('Failed to load module:', err);
         setError('Failed to load module data');
-        console.error(err);
       } finally {
         if (mounted) setLoading(false);
       }
-    })();
+    };
 
-    return () => { mounted = false; };
+    loadModule();
+    return () => (mounted = false);
   }, [moduleId]);
+
 
   const getLessonProgress = (lessonId) => {
     if (!moduleProgress || !moduleProgress.lessonsProgress) return null;
     return moduleProgress.lessonsProgress.find(lp => lp.lessonId === lessonId);
   };
 
-  const isLessonUnlocked = (lesson) => {
-    if (!lesson.prerequisites || lesson.prerequisites.length === 0) return true;
-    if (!moduleProgress || !moduleProgress.lessonsProgress) return false;
+  const isLessonUnlocked = (lesson, index) => {
+    // Always unlock the first lesson
+    if (index === 0) return true;
 
-    return lesson.prerequisites.every(prereqId => {
-      const prereqProgress = moduleProgress.lessonsProgress.find(lp => lp.lessonId === prereqId);
-      return prereqProgress && prereqProgress.status === 'completed';
-    });
+    if (!moduleProgress?.lessonsProgress?.length) return false;
+
+    const prevLesson = lessons[index - 1];
+    const prevProgress = moduleProgress.lessonsProgress.find(
+      lp => String(lp.lessonId) === String(prevLesson._id)
+    );
+
+    return prevProgress?.status === 'completed';
   };
 
+
+
   const handleLessonClick = async (lesson) => {
-    const unlocked = isLessonUnlocked(lesson);
+    console.log('🖱️ Clicking lesson:', lesson.name);
+    const unlocked = isLessonUnlocked(lesson, lessons.indexOf(lesson));
     if (unlocked) {
       try {
         await LessonProgressAPI.startLesson(lesson._id);
-        navigate(`/lesson/${lesson._id}`);
+        navigate(`/lesson/${lesson._id}`, { state: { moduleId: module._id } });
       } catch (err) {
+        console.error('❌ Failed to start lesson:', err);
         setError('Failed to start lesson: ' + err.response?.data?.message);
       }
+    } else {
+      console.log('🔒 Lesson is locked.');
     }
   };
 
@@ -92,7 +162,15 @@ const ModuleView = () => {
       </Container>
     );
   }
-
+  if (loading) {
+    return (
+      <Container className="mt-5 text-center">
+        <div className="spinner-border text-primary" role="status">
+          <span className="visually-hidden">Loading...</span>
+        </div>
+      </Container>
+    );
+  }
   if (!module) {
     return (
       <Container className="mt-5">
@@ -153,21 +231,25 @@ const ModuleView = () => {
             <ListGroup className="lms-lesson-list">
               {lessons.map((lesson, index) => {
                 const lessonProgress = getLessonProgress(lesson._id);
-                const unlocked = isLessonUnlocked(lesson);
+                const unlocked = isLessonUnlocked(lesson, index);
                 const status = lessonProgress?.status || 'not_started';
+                console.log('🔍 Lesson:', lesson.name, {
+                  index,
+                  unlocked: isLessonUnlocked(lesson, index),
+                  lessonsProgress: moduleProgress?.lessonsProgress
+                });
 
                 return (
                   <ListGroup.Item
                     key={lesson._id}
-                    className={`lms-lesson-item ${!unlocked ? 'lms-locked' : ''} ${
-                      status === 'completed' ? 'lms-completed' : ''
-                    } ${status === 'in_progress' ? 'lms-in-progress' : ''}`}
-                    onClick={() => handleLessonClick(lesson)}
+                    className={`lms-lesson-item ${!unlocked ? 'lms-locked' : ''} ${status === 'completed' ? 'lms-completed' : ''
+                      } ${status === 'in_progress' ? 'lms-in-progress' : ''}`}
+                    onClick={() => unlocked && handleLessonClick(lesson)}
                     style={{ cursor: unlocked ? 'pointer' : 'not-allowed' }}
                   >
                     <Row className="align-items-center">
-                      <Col xs={1} className="text-center">
-                        <div className="fw-bold">{index + 1}</div>
+                      <Col xs={1} className="text-center fw-bold">
+                        {index + 1}
                       </Col>
 
                       <Col xs={8}>
@@ -177,9 +259,7 @@ const ModuleView = () => {
                             <FaCheck className="text-success ms-2" size={16} />
                           )}
                         </h6>
-                        <p className="text-muted mb-0 small">
-                          {lesson.description}
-                        </p>
+                        <p className="text-muted mb-0 small">{lesson.description}</p>
                         <div className="mt-1">
                           <small className="text-muted">
                             <FaClock className="me-1" size={12} />

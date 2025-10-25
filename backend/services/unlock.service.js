@@ -14,7 +14,9 @@ async function unlockNextLesson(progress, module, currentLesson, moduleProgress)
     if (!exists) {
       moduleProgress.lessonsProgress.push({
         lessonId: nextLesson._id,
-        status: 'unlocked',
+        // lesson progress uses enum ['not_started','in_progress','completed']
+        // use 'not_started' when unlocking so it validates against the schema
+        status: 'not_started',
         timeSpent: 0,
         lastPosition: 0,
         completedContentItems: []

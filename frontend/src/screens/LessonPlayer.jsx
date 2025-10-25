@@ -5,6 +5,7 @@ import { FaArrowLeft, FaArrowRight, FaCheck } from 'react-icons/fa';
 import LearningAPI from '../services/learning.api';
 import LessonProgressAPI from '../services/lessonProgress.service';
 import QuizzesAPI from '../services/quizzes.api';
+import ProgressAPI from '../services/progress.api';
 
 const LessonPlayer = () => {
   const { lessonId } = useParams();
@@ -133,114 +134,114 @@ const LessonPlayer = () => {
     );
   };
 
-// --- Load Lesson Data ---
-useEffect(() => {
-  let mounted = true;
+  // --- Load Lesson Data ---
+  useEffect(() => {
+    let mounted = true;
 
-  const loadLesson = async () => {
-    try {
-      setLoading(true);
-      console.log('🎥 Fetching lesson data for:', lessonId);
-      const data = await LearningAPI.getLessonById(lessonId);
+    const loadLesson = async () => {
+      try {
+        setLoading(true);
+        console.log('🎥 Fetching lesson data for:', lessonId);
+        const data = await LearningAPI.getLessonById(lessonId);
 
-      if (!mounted) return;
+        if (!mounted) return;
 
-      setLesson(data.lesson);
-      setContent(data.content || []);
+        setLesson(data.lesson);
+        setContent(data.content || []);
 
-      if (data.progress) {
-        setTimeSpent(data.progress.timeSpent || 0);
-        timeSpentRef.current = data.progress.timeSpent || 0;
-        setCompletedItems(data.progress.completedContentItems || []);
+        if (data.progress) {
+          setTimeSpent(data.progress.timeSpent || 0);
+          timeSpentRef.current = data.progress.timeSpent || 0;
+          setCompletedItems(data.progress.completedContentItems || []);
+        }
+
+      } catch (err) {
+        console.error('❌ Error loading lesson:', err);
+        if (mounted) setError('Failed to load lesson');
+      } finally {
+        if (mounted) setLoading(false);
       }
+    };
 
-    } catch (err) {
-      console.error('❌ Error loading lesson:', err);
-      if (mounted) setError('Failed to load lesson');
-    } finally {
-      if (mounted) setLoading(false);
+    loadLesson();
+
+    return () => {
+      mounted = false;
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (saveIntervalRef.current) clearInterval(saveIntervalRef.current);
+      if (videoFallbackUrl) {
+        try { URL.revokeObjectURL(videoFallbackUrl); } catch (e) { }
+      }
+    };
+  }, [lessonId, videoFallbackUrl]); // ✅ Only re-run if lessonId or fallback changes
+
+
+  // --- Timer + Auto-Save Logic ---
+  // Keep a fresh copy of auto-save function (refs avoid re-renders)
+  useEffect(() => {
+    autoSaveRef.current = async () => {
+      if (!lesson || timeSpentRef.current === 0) return;
+      try {
+        setSaving(true);
+        await LessonProgressAPI.updateLessonProgress(lessonId, {
+          timeSpent: timeSpentRef.current,
+          lastPosition: currentContentIndex,
+          completedContentItems: completedItems,
+        });
+      } catch (err) {
+        console.error('Auto-save failed:', err);
+      } finally {
+        setSaving(false);
+      }
+    };
+  }, [lesson, lessonId, currentContentIndex, completedItems]);
+
+  useEffect(() => {
+    if (!lesson) return;
+
+    // 1️⃣ Timer: increment every second
+    if (!timerRef.current) {
+      timerRef.current = setInterval(() => {
+        timeSpentRef.current += 1;
+      }, 1000);
     }
-  };
 
-  loadLesson();
-
-  return () => {
-    mounted = false;
-    if (timerRef.current) clearInterval(timerRef.current);
-    if (saveIntervalRef.current) clearInterval(saveIntervalRef.current);
-    if (videoFallbackUrl) {
-      try { URL.revokeObjectURL(videoFallbackUrl); } catch (e) {}
-    }
-  };
-}, [lessonId, videoFallbackUrl]); // ✅ Only re-run if lessonId or fallback changes
-
-
-// --- Timer + Auto-Save Logic ---
-// Keep a fresh copy of auto-save function (refs avoid re-renders)
-useEffect(() => {
-  autoSaveRef.current = async () => {
-    if (!lesson || timeSpentRef.current === 0) return;
-    try {
-      setSaving(true);
-      await LessonProgressAPI.updateLessonProgress(lessonId, {
-        timeSpent: timeSpentRef.current,
-        lastPosition: currentContentIndex,
-        completedContentItems: completedItems,
-      });
-    } catch (err) {
-      console.error('Auto-save failed:', err);
-    } finally {
-      setSaving(false);
-    }
-  };
-}, [lesson, lessonId, currentContentIndex, completedItems]);
-
-useEffect(() => {
-  if (!lesson) return;
-
-  // 1️⃣ Timer: increment every second
-  if (!timerRef.current) {
-    timerRef.current = setInterval(() => {
-      timeSpentRef.current += 1;
+    // 2️⃣ Update visible time every 5s directly via DOM (no React state updates)
+    const syncInterval = setInterval(() => {
+      try {
+        const secs = timeSpentRef.current;
+        const mins = Math.floor(secs / 60);
+        const formatted = `${mins}:${(secs % 60).toString().padStart(2, '0')}`;
+        if (timeDisplayRef.current) timeDisplayRef.current.textContent = formatted;
+      } catch (e) {
+        // swallow any rare errors
+        console.warn('Time display update failed', e.message || e);
+      }
     }, 1000);
-  }
 
-  // 2️⃣ Update visible time every 5s directly via DOM (no React state updates)
-  const syncInterval = setInterval(() => {
-    try {
-      const secs = timeSpentRef.current;
-      const mins = Math.floor(secs / 60);
-      const formatted = `${mins}:${(secs % 60).toString().padStart(2, '0')}`;
-      if (timeDisplayRef.current) timeDisplayRef.current.textContent = formatted;
-    } catch (e) {
-      // swallow any rare errors
-      console.warn('Time display update failed', e.message || e);
+    // 3️⃣ Auto-save progress every 30s using the latest ref
+    if (!saveIntervalRef.current) {
+      saveIntervalRef.current = setInterval(() => {
+        if (autoSaveRef.current) autoSaveRef.current();
+      }, 30000);
     }
-  }, 1000);
 
-  // 3️⃣ Auto-save progress every 30s using the latest ref
-  if (!saveIntervalRef.current) {
-    saveIntervalRef.current = setInterval(() => {
-      if (autoSaveRef.current) autoSaveRef.current();
-    }, 30000);
-  }
+    // 🧹 Cleanup on unmount or lesson change
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+      if (saveIntervalRef.current) {
+        clearInterval(saveIntervalRef.current);
+        saveIntervalRef.current = null;
+      }
+      clearInterval(syncInterval);
+    };
+  }, [lesson]); // ✅ Run once per lesson load
 
-  // 🧹 Cleanup on unmount or lesson change
-  return () => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-    if (saveIntervalRef.current) {
-      clearInterval(saveIntervalRef.current);
-      saveIntervalRef.current = null;
-    }
-    clearInterval(syncInterval);
-  };
-}, [lesson]); // ✅ Run once per lesson load
-
-// (Ref-based time display is used above to avoid re-renders; a React.memo TimeDisplay
-// can be added later if you prefer React-driven updates.)
+  // (Ref-based time display is used above to avoid re-renders; a React.memo TimeDisplay
+  // can be added later if you prefer React-driven updates.)
 
 
 
@@ -275,14 +276,25 @@ useEffect(() => {
       // No confirmation: complete lesson immediately even if some items are incomplete
 
       // Request server to skip quiz/module-level requirements when completing
-  // By default do not skip quizzes — let the backend enforce quiz requirements.
-  const result = await LessonProgressAPI.completeLesson(lessonId, timeSpent);
+      // By default do not skip quizzes — let the backend enforce quiz requirements.
+      const result = await LessonProgressAPI.completeLesson(lessonId, timeSpent);
+      try {
+        const response = await fetch('http://localhost:5000/api/progress/me', {
+          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+        });
+        const progressData = await response.json();
+        localStorage.setItem('progress', JSON.stringify(progressData));
+      } catch (err) {
+        console.warn('⚠️ Could not refresh progress data', err);
+      }
 
       if (result.xpEarned) {
         alert(`Lesson completed! You earned ${result.xpEarned} XP!${result.leveledUp ? ' Level Up!' : ''}`);
       }
 
       navigate(-1);
+      const latest = await ProgressAPI.getProgress();
+      localStorage.setItem('progress', JSON.stringify(latest.data));
     } catch (err) {
       setError('Failed to complete lesson');
     }
@@ -347,12 +359,12 @@ useEffect(() => {
               <button className="btn btn-sm btn-outline-secondary me-2" onClick={async () => {
                 // clear fallback and attempt reload
                 if (videoFallbackUrl) {
-                  try { URL.revokeObjectURL(videoFallbackUrl); } catch (e) {}
+                  try { URL.revokeObjectURL(videoFallbackUrl); } catch (e) { }
                   setVideoFallbackUrl(null);
                 }
                 setVideoFallbackAttempted(false);
                 if (videoRef.current) {
-                  try { videoRef.current.pause(); } catch (e) {}
+                  try { videoRef.current.pause(); } catch (e) { }
                   videoRef.current.src = currentContent.url;
                   videoRef.current.load();
                   try { await videoRef.current.play(); } catch (e) { console.log('Retry play failed', e.message); }
@@ -447,7 +459,7 @@ useEffect(() => {
   const hasNoRenderableContent = content.length === 0;
   const isLastContent = hasNoRenderableContent ? true : currentContentIndex === content.length - 1;
   // Treat quiz-type content with missing quizId as not required for completion
-  
+
   return (
     <div className="lesson-player-container">
       {error && (
@@ -526,15 +538,15 @@ useEffect(() => {
 
               {isLastContent ? (
                 <>
-                <Button
-                  variant="success"
-                  onClick={handleCompleteLesson}
-                  // Allow force-complete: user can complete even if not all items are marked completed
-                  disabled={false}
-                >
-                  <FaCheck className="me-2" />
-                  Complete Lesson
-                </Button>
+                  <Button
+                    variant="success"
+                    onClick={handleCompleteLesson}
+                    // Allow force-complete: user can complete even if not all items are marked completed
+                    disabled={false}
+                  >
+                    <FaCheck className="me-2" />
+                    Complete Lesson
+                  </Button>
                 </>
               ) : (
                 <Button
@@ -554,26 +566,25 @@ useEffect(() => {
                 <h6 className="mb-3">Lesson Content</h6>
                 <div className="list-group list-group-flush">
                   {content.map((item, index) => (
-                      <div
-                        key={item._id}
-                        className={`list-group-item list-group-item-action ${
-                          index === currentContentIndex ? 'active' : ''
+                    <div
+                      key={item._id}
+                      className={`list-group-item list-group-item-action ${index === currentContentIndex ? 'active' : ''
                         } ${completedItems.includes(item._id) ? 'list-group-item-success' : ''}`}
-                        style={{ cursor: 'pointer', fontSize: '0.875rem' }}
-                          onClick={() => {
-                          // quizzes are filtered out earlier, so simply set the index
-                          setCurrentContentIndex(index);
-                        }}
-                      >
-                        <div className="d-flex align-items-center">
-                          <span className="me-2">{index + 1}.</span>
-                          <span className="flex-grow-1">{item.title}</span>
-                          {completedItems.includes(item._id) && (
-                            <FaCheck className="text-success" size={12} />
-                          )}
-                        </div>
+                      style={{ cursor: 'pointer', fontSize: '0.875rem' }}
+                      onClick={() => {
+                        // quizzes are filtered out earlier, so simply set the index
+                        setCurrentContentIndex(index);
+                      }}
+                    >
+                      <div className="d-flex align-items-center">
+                        <span className="me-2">{index + 1}.</span>
+                        <span className="flex-grow-1">{item.title}</span>
+                        {completedItems.includes(item._id) && (
+                          <FaCheck className="text-success" size={12} />
+                        )}
                       </div>
-                    ))}
+                    </div>
+                  ))}
                 </div>
 
                 <hr />
@@ -585,7 +596,7 @@ useEffect(() => {
                   </div>
                   <div className="d-flex justify-content-between">
                     <span>Time:</span>
-                    <strong>{formatTime(timeSpent)}</strong>
+                    <strong>{formatTime(timeSpentRef.current)}</strong>
                   </div>
                 </div>
               </Card.Body>
