@@ -17,7 +17,10 @@ module.exports = (req, res, next) => {
     const decoded = verifyToken(token)
 
     // Add user from payload to request
-    req.user = decoded
+    req.user = {
+      ...decoded,
+      _id: decoded.id,
+    }
     next()
   } catch (error) {
     return res.status(401).json({

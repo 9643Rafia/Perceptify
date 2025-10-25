@@ -112,7 +112,7 @@ exports.getModuleById = async (req, res) => {
       status: 'not_started'
     };
     if (req.user) {
-      const progress = await Progress.findOne({ userId: req.user.id });
+      const progress = await Progress.findOne({ userId: req.user._id });
       console.log('🎯 Fetched user progress for module:', progress);
       if (progress?.tracksProgress?.length) {
         console.log("🧠 User progress tracks:", progress.tracksProgress);
