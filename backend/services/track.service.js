@@ -88,8 +88,16 @@ async function startLesson(userId, lessonId) {
     // Check prerequisites
     if (lesson.prerequisites?.length > 0) {
       const prerequisitesCompleted = lesson.prerequisites.every(prereqId => {
-        const prereqProgress = moduleProgress.lessonsProgress.find(lp => String(lp.lessonId) === String(prereqId));
-        return prereqProgress && prereqProgress.status === 'completed';
+        // Check if it's a module prerequisite (ObjectId format)
+        if (prereqId.match(/^[0-9a-fA-F]{24}$/)) {
+          // It's a module ObjectId - check if that module is completed
+          const prereqModuleProgress = trackProgress.modulesProgress.find(mp => String(mp.moduleId) === String(prereqId));
+          return prereqModuleProgress && prereqModuleProgress.status === 'completed';
+        } else {
+          // It's a lesson prerequisite - check if that lesson is completed
+          const prereqProgress = moduleProgress.lessonsProgress.find(lp => String(lp.lessonId) === String(prereqId));
+          return prereqProgress && prereqProgress.status === 'completed';
+        }
       });
       if (!prerequisitesCompleted) throw new Error('Prerequisites not completed');
     }
