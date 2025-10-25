@@ -25,34 +25,46 @@ exports.getTracks = async (req, res) => {
 exports.getTrackById = async (req, res) => {
   try {
     const { trackId } = req.params;
-    console.log('🎯 GET TRACK BY ID - trackId:', trackId)
+    console.log('🎯 GET TRACK BY ID - trackId:', trackId);
 
+    // Track is stored by _id; accept both ObjectId and string
     const track = await Track.findOne({ _id: trackId, status: 'active' });
-    console.log('🎯 GET TRACK BY ID - Found track:', track)
+    console.log('🎯 GET TRACK BY ID - Found track:', track);
 
     if (!track) {
-      console.log('❌ GET TRACK BY ID - Track not found')
+      console.log('❌ GET TRACK BY ID - Track not found');
       return res.status(404).json({ message: 'Track not found' });
     }
 
-    // Get modules for this track
-    const modules = await Module.find({ trackId: track._id, status: 'active' }).sort({ order: 1 });
-    console.log('🎯 GET TRACK BY ID - Found modules:', modules.length)
-    console.log('🎯 GET TRACK BY ID - Modules data:', modules)
+    // Get modules for this track. Compare using String() to avoid ObjectId vs string mismatches.
+    const modules = await Module.find({ trackId: String(track._id), status: 'active' }).sort({ order: 1 });
+    console.log('🎯 GET TRACK BY ID - Found modules:', modules.length);
 
     // Get user progress if authenticated
-    let progress = null;
+    let trackProgress = null;
     if (req.user) {
-      progress = await Progress.findOne({ userId: req.user._id });
-      console.log('🎯 GET TRACK BY ID - User progress:', progress)
+      const progress = await Progress.findOne({ userId: req.user._id });
+      console.log('🎯 GET TRACK BY ID - User progress loaded:', !!progress);
+
+      if (progress?.tracksProgress?.length) {
+        const tid = String(track._id);
+        trackProgress = progress.tracksProgress.find(tp => String(tp.trackId) === tid) || null;
+
+        // Normalize nested moduleId types to strings for the client (optional but helpful)
+        if (trackProgress?.modulesProgress?.length) {
+          trackProgress = {
+            ...trackProgress.toObject?.() || trackProgress,
+            modulesProgress: trackProgress.modulesProgress.map(mp => ({
+              ...mp.toObject?.() || mp,
+              moduleId: String(mp.moduleId),
+            })),
+          };
+        }
+      }
     }
 
-    const response = {
-      track,
-      modules,
-      progress: progress ? progress.tracksProgress.find(tp => tp.trackId === track._id) : null
-    }
-    console.log('🎯 GET TRACK BY ID - Sending response:', response)
+    const response = { track, modules, progress: trackProgress };
+    console.log('🎯 GET TRACK BY ID - Sending response (progress found?):', !!trackProgress);
     res.json(response);
   } catch (error) {
     console.error('❌ GET TRACK BY ID - Error:', error);
@@ -67,16 +79,26 @@ exports.getModulesByTrack = async (req, res) => {
   try {
     const { trackId } = req.params;
 
-    const modules = await Module.find({ trackId, status: 'active' }).sort({ order: 1 });
+    // Fetch modules using the same String() form used in your seed data
+    const modules = await Module.find({ trackId: String(trackId), status: 'active' }).sort({ order: 1 });
 
-    // Get user progress if authenticated
+    // Build userProgress = the module progress array for this track (if any)
     let userProgress = null;
+
     if (req.user) {
       const progress = await Progress.findOne({ userId: req.user._id });
-      if (progress) {
-        const trackProgress = progress.tracksProgress.find(tp => tp.trackId === trackId);
-        if (trackProgress) {
-          userProgress = trackProgress.modulesProgress;
+
+      if (progress?.tracksProgress?.length) {
+        // trackId can be ObjectId on the progress side; normalize both to strings
+        const tp = progress.tracksProgress.find(tp => String(tp.trackId) === String(trackId));
+        if (tp?.modulesProgress?.length) {
+          // Return module progresses normalized (moduleId as string) to help the client match
+          userProgress = tp.modulesProgress.map(mp => ({
+            ...mp.toObject?.() || mp,
+            moduleId: String(mp.moduleId),
+          }));
+        } else {
+          userProgress = [];
         }
       }
     }

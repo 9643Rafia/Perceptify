@@ -372,7 +372,7 @@
         "scoring": {
           "pointsPerCorrect": 10,
           "passingScore": 70,
-          "attemptsAllowed": 3
+          "attemptsAllowed": 30
         },
         "feedback": "immediate"
       },
