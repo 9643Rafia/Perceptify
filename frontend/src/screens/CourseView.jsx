@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Container, Row, Col, Card, Button, ProgressBar, Badge, Alert } from 'react-bootstrap';
 import { useParams, useNavigate } from 'react-router-dom';
 import { FaLock, FaCheck, FaClock, FaPlay } from 'react-icons/fa';
@@ -13,26 +13,43 @@ const CourseView = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        setLoading(true);
-        const data = await LearningAPI.getTrackById(trackId);
-        if (!mounted) return;
-        setTrack(data.track);
-        setModules(data.modules);
-        setProgress(data.progress);
-      } catch (err) {
-        setError('Failed to load course data');
-        console.error(err);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    })();
-
-    return () => { mounted = false; };
+  const loadCourseData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const data = await LearningAPI.getTrackById(trackId);
+      console.log('Loaded course data:', {
+        track: data.track?.name,
+        modulesCount: data.modules?.length,
+        progress: data.progress ? {
+          modulesProgressCount: data.progress.modulesProgress?.length,
+          modulesProgress: data.progress.modulesProgress?.map(mp => ({ id: mp.moduleId, status: mp.status }))
+        } : null
+      });
+      setTrack(data.track);
+      setModules(data.modules);
+      setProgress(data.progress);
+      setError('');
+    } catch (err) {
+      setError('Failed to load course data');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
   }, [trackId]);
+
+  useEffect(() => {
+    loadCourseData();
+  }, [loadCourseData]);
+
+  // Refresh progress when component comes back into focus
+  useEffect(() => {
+    const handleFocus = () => {
+      loadCourseData();
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [loadCourseData]);
 
   const getModuleProgress = (moduleId) => {
     if (!progress || !progress.modulesProgress) return null;
@@ -55,8 +72,25 @@ const CourseView = () => {
     if (!progress || !progress.modulesProgress) return false;
 
     return module.prerequisites.every(prereqId => {
-      const prereqProgress = progress.modulesProgress.find(mp => mp.moduleId === prereqId);
-      return prereqProgress && prereqProgress.status === 'completed';
+      if (prereqId.startsWith('track_')) {
+        // Handle track prerequisites - check if all modules in the track are completed
+        // For now, just return true since we don't have track completion logic
+        console.log('Track prerequisite found:', prereqId, '- allowing access');
+        return true;
+      }
+
+      // Handle module prerequisites - find the module with this ObjectId
+      const prereqModule = modules.find(m => m._id === prereqId);
+      if (!prereqModule) {
+        console.log('Prerequisite module not found for id:', prereqId);
+        return false;
+      }
+
+      // Find progress for this module's _id
+      const prereqProgress = progress.modulesProgress.find(mp => mp.moduleId === prereqModule._id);
+      const isCompleted = prereqProgress && prereqProgress.status === 'completed';
+      console.log('Module', prereqModule.name, 'completed:', isCompleted);
+      return isCompleted;
     });
   };
 
