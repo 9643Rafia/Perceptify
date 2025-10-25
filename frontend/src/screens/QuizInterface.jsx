@@ -1,12 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Container, Row, Col, Card, Button, Form, Alert, Badge } from 'react-bootstrap';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { FaCheck, FaTimes, FaFlag, FaClock } from 'react-icons/fa';
 import QuizzesAPI from '../services/quizzes.api';
+import LessonProgressAPI from '../services/lessonProgress.service';
+import LearningAPI from '../services/learning.api';
 
 const QuizInterface = () => {
   const { quizId } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const lessonId = searchParams.get('lessonId');
+  const contentId = searchParams.get('contentId');
   const [quiz, setQuiz] = useState(null);
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState({});
@@ -118,6 +123,22 @@ const QuizInterface = () => {
 
       const startTime = quiz.timeLimit ? quiz.timeLimit * 60 - timeRemaining : 0;
   const result = await QuizzesAPI.submitQuiz(quizId, formattedAnswers, startTime);
+
+      // If this is a mini-quiz from a lesson, mark the content as complete
+      if (lessonId && contentId && result.passed) {
+        try {
+          // Get current lesson progress to append the completed content
+          const lessonData = await LearningAPI.getLessonById(lessonId);
+          const currentCompleted = lessonData.progress?.completedContentItems || [];
+          if (!currentCompleted.includes(contentId)) {
+            await LessonProgressAPI.updateLessonProgress(lessonId, {
+              completedContentItems: [...currentCompleted, contentId]
+            });
+          }
+        } catch (progressErr) {
+          console.warn('Failed to update lesson progress after quiz completion:', progressErr);
+        }
+      }
 
       setResults(result);
       setShowResults(true);

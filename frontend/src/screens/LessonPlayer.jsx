@@ -4,7 +4,6 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { FaArrowLeft, FaArrowRight, FaCheck } from 'react-icons/fa';
 import LearningAPI from '../services/learning.api';
 import LessonProgressAPI from '../services/lessonProgress.service';
-import QuizzesAPI from '../services/quizzes.api';
 import ProgressAPI from '../services/progress.api';
 
 const LessonPlayer = () => {
@@ -28,110 +27,6 @@ const LessonPlayer = () => {
   const timeDisplayRef = useRef(null);
 
   // --- removed older fetchLessonData and timer/auto-save to replace with drop-in below ---
-
-  // Minimal inline mini-quiz component (renders inside lesson content)
-  const MiniQuiz = ({ content, onComplete }) => {
-    const [quiz, setQuiz] = useState(null);
-    const [answers, setAnswers] = useState({});
-    const [loadingQuiz, setLoadingQuiz] = useState(false);
-    const [submitting, setSubmitting] = useState(false);
-    const [errorQuiz, setErrorQuiz] = useState('');
-
-    useEffect(() => {
-      let mounted = true;
-      const load = async () => {
-        if (!content?.quizId) return;
-        try {
-          setLoadingQuiz(true);
-          const data = await QuizzesAPI.getQuizById(content.quizId);
-          if (!mounted) return;
-          setQuiz(data.quiz || data);
-        } catch (e) {
-          console.error('MiniQuiz: failed to load quiz', e);
-          setErrorQuiz('Failed to load quiz');
-        } finally {
-          if (mounted) setLoadingQuiz(false);
-        }
-      };
-      load();
-      return () => { mounted = false; };
-    }, [content]);
-
-    const toggleChoice = (questionId, choiceIndex, multi) => {
-      setAnswers(prev => {
-        const copy = { ...prev };
-        if (multi) {
-          const arr = new Set(copy[questionId] || []);
-          if (arr.has(choiceIndex)) arr.delete(choiceIndex); else arr.add(choiceIndex);
-          copy[questionId] = Array.from(arr);
-        } else {
-          copy[questionId] = [choiceIndex];
-        }
-        return copy;
-      });
-    };
-
-    const handleSubmit = async () => {
-      if (!quiz) return;
-      setSubmitting(true);
-      try {
-        const formatted = quiz.questions.map(q => ({
-          questionId: q.questionId || q._id,
-          answers: (answers[q.questionId] || answers[q._id] || []).map(i => String(i))
-        }));
-        await QuizzesAPI.submitQuiz(quiz.quizId || quiz._id || content.quizId, formatted, 0);
-        if (onComplete) onComplete();
-      } catch (e) {
-        console.error('MiniQuiz submit failed', e);
-        setErrorQuiz('Failed to submit quiz');
-      } finally {
-        setSubmitting(false);
-      }
-    };
-
-    if (!content?.quizId) return <div className="alert alert-secondary">Quiz not available</div>;
-    if (loadingQuiz) return <div>Loading quiz...</div>;
-    if (errorQuiz) return <div className="text-danger">{errorQuiz}</div>;
-    if (!quiz) return null;
-
-    return (
-      <div className="mini-quiz">
-        <h5>{quiz.title}</h5>
-        <p className="text-muted">{quiz.description}</p>
-        {quiz.questions.map((q, idx) => {
-          const qid = q.questionId || q._id || idx;
-          const multi = q.type === 'multiple';
-          return (
-            <div key={qid} className="mb-3">
-              <div><strong>{idx + 1}. {q.question}</strong></div>
-              <div>
-                {(q.choices || []).map((choice, ci) => {
-                  const checked = (answers[qid] || []).includes(ci);
-                  return (
-                    <label key={ci} className="d-block">
-                      <input
-                        type={multi ? 'checkbox' : 'radio'}
-                        name={`q-${qid}`}
-                        checked={checked}
-                        onChange={() => toggleChoice(qid, ci, multi)}
-                        className="me-2"
-                      />
-                      {choice}
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })}
-        <div className="d-flex justify-content-end">
-          <button className="btn btn-sm btn-primary" disabled={submitting} onClick={handleSubmit}>
-            {submitting ? 'Submitting...' : 'Submit Answer'}
-          </button>
-        </div>
-      </div>
-    );
-  };
 
   // --- Load Lesson Data ---
   useEffect(() => {
@@ -401,10 +296,17 @@ const LessonPlayer = () => {
 
       case 'quiz':
         return (
-          <MiniQuiz
-            content={currentContent}
-            onComplete={() => markContentComplete(currentContent._id)}
-          />
+          <div className="lms-content-box text-center">
+            <h3>{currentContent.title}</h3>
+            <p>{currentContent.description}</p>
+            <Button
+              variant="primary"
+              size="lg"
+              onClick={() => navigate(`/quiz/${currentContent.quizId}?lessonId=${lessonId}&contentId=${currentContent._id}`)}
+            >
+              Start Quiz
+            </Button>
+          </div>
         );
 
       default:
@@ -459,6 +361,7 @@ const LessonPlayer = () => {
   const hasNoRenderableContent = content.length === 0;
   const isLastContent = hasNoRenderableContent ? true : currentContentIndex === content.length - 1;
   // Treat quiz-type content with missing quizId as not required for completion
+  const allQuizzesCompleted = content.filter(c => c.type === 'quiz').every(c => completedItems.includes(c._id));
 
   return (
     <div className="lesson-player-container">
@@ -536,7 +439,7 @@ const LessonPlayer = () => {
                 </small>
               </div>
 
-              {isLastContent ? (
+              {isLastContent && allQuizzesCompleted ? (
                 <>
                   <Button
                     variant="success"
@@ -548,6 +451,10 @@ const LessonPlayer = () => {
                     Complete Lesson
                   </Button>
                 </>
+              ) : isLastContent ? (
+                <div className="text-muted small">
+                  Complete all quizzes to finish the lesson
+                </div>
               ) : (
                 <Button
                   variant="primary"
