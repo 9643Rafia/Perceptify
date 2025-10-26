@@ -4,6 +4,7 @@ const Lab = require('../models/lab.model');
 const Progress = require('../models/progress.model');
 const Module = require('../models/module.model');
 const Lesson = require('../models/lesson.model');
+const Track = require('../models/track.model');
 
 // Resolve a module whether quiz.moduleId is an ObjectId or a string code
 async function findModuleFlexible(moduleRef) {
@@ -175,6 +176,12 @@ exports.submitQuiz = async (req, res) => {
         return res.status(404).json({ message: 'Module not found' });
       }
 
+      // Get the track document for order comparison
+      const track = await Track.findById(moduleDoc.trackId);
+      if (!track) {
+        return res.status(404).json({ message: 'Track not found' });
+      }
+
       // Find the parent track progress by matching trackId as string
       const trackProgress = (progress.tracksProgress || []).find(
         (tp) => String(tp.trackId) === String(moduleDoc.trackId)
@@ -272,6 +279,40 @@ exports.submitQuiz = async (req, res) => {
         if (allLessonsCompleted && moduleProgress.status !== 'completed') {
           moduleProgress.status = 'completed';
           moduleProgress.completedAt = new Date();
+
+          // Check if all modules in this track are now completed
+          const allModulesInTrackCompleted = trackProgress.modulesProgress.every((mp) => mp.status === 'completed');
+          if (allModulesInTrackCompleted && trackProgress.status !== 'completed') {
+            trackProgress.status = 'completed';
+            trackProgress.completedAt = new Date();
+            console.log('[QUIZ] submitQuiz: track completed:', String(moduleDoc.trackId));
+
+            // 🔓 Unlock next track
+            const nextTrack = await Track.findOne({
+              status: 'active',
+              order: { $gt: track.order },
+            }).sort({ order: 1 });
+
+            if (nextTrack) {
+              let nextTrackProgress = progress.tracksProgress.find(
+                (tp) => String(tp.trackId) === String(nextTrack._id)
+              );
+
+              if (!nextTrackProgress) {
+                nextTrackProgress = {
+                  trackId: nextTrack._id,
+                  status: 'unlocked',
+                  modulesProgress: [],
+                  startedAt: new Date()
+                };
+                progress.tracksProgress.push(nextTrackProgress);
+                console.log('[QUIZ] submitQuiz: created progress for next track and unlocked:', String(nextTrack._id));
+              } else if (nextTrackProgress.status === 'locked' || !nextTrackProgress.status) {
+                nextTrackProgress.status = 'unlocked';
+                console.log('[QUIZ] submitQuiz: unlocked existing next track progress:', String(nextTrack._id));
+              }
+            }
+          }
         }
 
         // 🔓 Unlock next module in same track by order

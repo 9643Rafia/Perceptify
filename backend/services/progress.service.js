@@ -11,6 +11,29 @@ async function ensureLessonProgress(userId, lessonId) {
   let progress = await Progress.findOne({ userId });
   if (!progress) progress = await Progress.create({ userId, tracksProgress: [] });
 
+  // Ensure tracksProgress is an array
+  if (!Array.isArray(progress.tracksProgress)) {
+    progress.tracksProgress = [];
+  }
+
+  // Ensure nested arrays are arrays
+  for (const tp of progress.tracksProgress) {
+    if (!Array.isArray(tp.modulesProgress)) {
+      tp.modulesProgress = [];
+    }
+    for (const mp of tp.modulesProgress) {
+      if (!Array.isArray(mp.lessonsProgress)) {
+        mp.lessonsProgress = [];
+      }
+      if (!Array.isArray(mp.quizAttempts)) {
+        mp.quizAttempts = [];
+      }
+      if (!Array.isArray(mp.labAttempts)) {
+        mp.labAttempts = [];
+      }
+    }
+  }
+
   if (!lesson) return { progress }; // if only fetching general progress
 
   // Track

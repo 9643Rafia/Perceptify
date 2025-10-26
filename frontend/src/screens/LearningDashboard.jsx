@@ -37,45 +37,29 @@ const LearningDashboard = () => {
       setLoading(true);
       console.log('📊 LearningDashboard: Starting to fetch data...');
 
+      // Fetch tracks, dashboard stats, badges, and user progress
+      const [tracksData, statsData, badgesData, progressData] = await Promise.all([
+        LearningAPI.getAllTracks(),
+        DashboardAPI.getDashboardStats().catch(e => {
+          console.warn('dashboard stats not available', e.message || e);
+          return null;
+        }),
+        BadgesAPI.getUserBadges().catch(e => {
+          console.warn('badges not available', e.message || e);
+          return null;
+        }),
+        ProgressAPI.getUserProgress().catch(e => {
+          console.warn('user progress not available', e.message || e);
+          return null;
+        })
+      ]);
 
-      // Fetch tracks, dashboard stats and badges. User-specific progress is not
-      // available via /progress/me in the current backend routing, so we
-      // retrieve the next learning item instead (if authenticated) and use it
-      // to populate a minimal progress object for the "Continue" card.
-      const tracksData = await LearningAPI.getAllTracks();
-      let statsData = null;
-      let badgesData = null;
-      let nextContent = null;
-
-      try {
-        statsData = await DashboardAPI.getDashboardStats();
-      } catch (e) {
-        console.warn('dashboard stats not available', e.message || e);
-      }
-
-      try {
-        badgesData = await BadgesAPI.getUserBadges();
-      } catch (e) {
-        console.warn('badges not available', e.message || e);
-      }
-
-      try {
-        nextContent = await LearningAPI.getNextContent();
-      } catch (e) {
-        // nextContent requires authentication; ignore if unavailable
-        console.warn('next content not available', e.message || e);
-      }
-
-      console.log('📊 LearningDashboard: Data received:', { tracksData, statsData, badgesData, nextContent });
+      console.log('📊 LearningDashboard: Data received:', { tracksData, statsData, badgesData, progressData });
 
       setTracks(tracksData);
       setStats(statsData);
       setBadges(badgesData);
-      if (nextContent && nextContent.type === 'lesson') {
-        setProgress({ currentLesson: nextContent.lesson._id });
-      } else {
-        setProgress(null);
-      }
+      setProgress(progressData);
 
       console.log('📊 LearningDashboard: State updated, tracks count:', tracksData?.length);
     } catch (err) {

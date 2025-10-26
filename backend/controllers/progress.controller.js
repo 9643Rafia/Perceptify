@@ -1,9 +1,40 @@
 const { ensureLessonProgress } = require('../services/progress.service');
 const { unlockNextLesson, unlockNextModule } = require('../services/unlock.service');
+const Progress = require('../models/progress.model');
 
 exports.getUserProgress = async (req, res) => {
   try {
-    const progress = await ensureLessonProgress(req.user.id); // creates if not exists
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({ message: 'User not authenticated' });
+    }
+
+    let progress = await Progress.findOne({ userId: req.user.id });
+    if (!progress) {
+      progress = new Progress({ userId: req.user.id, tracksProgress: [] });
+      await progress.save();
+    }
+
+    // Ensure arrays are arrays to prevent undefined access
+    if (!Array.isArray(progress.tracksProgress)) {
+      progress.tracksProgress = [];
+    }
+    for (const tp of progress.tracksProgress) {
+      if (!Array.isArray(tp.modulesProgress)) {
+        tp.modulesProgress = [];
+      }
+      for (const mp of tp.modulesProgress) {
+        if (!Array.isArray(mp.lessonsProgress)) {
+          mp.lessonsProgress = [];
+        }
+        if (!Array.isArray(mp.quizAttempts)) {
+          mp.quizAttempts = [];
+        }
+        if (!Array.isArray(mp.labAttempts)) {
+          mp.labAttempts = [];
+        }
+      }
+    }
+
     res.json(progress);
   } catch (err) {
     console.error('Error fetching user progress:', err);
