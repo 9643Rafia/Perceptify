@@ -242,6 +242,10 @@ async function startLesson(userId, lessonId) {
         lower.replace(/^mod[-_]?/, 'module_'),
         raw.replace(/^MODULE[-_]?/i, 'module_'),
         lower.replace(/^module[-_]?/, 'module_'),
+        raw.replace(/^LES[-_]?/i, 'lesson_'),
+        lower.replace(/^les[-_]?/, 'lesson_'),
+        raw.replace(/^LESSON[-_]?/i, 'lesson_'),
+        lower.replace(/^lesson[-_]?/, 'lesson_'),
         raw.replace(/[^a-zA-Z0-9]/g, ''),
         lower.replace(/[^a-z0-9]/g, ''),
       ])
@@ -256,6 +260,38 @@ async function startLesson(userId, lessonId) {
       }
     });
   });
+
+  const lessonsInTrack = await Lesson.find({
+    status: 'active',
+    moduleId: { $in: modulesInTrack.map((modDoc) => modDoc._id) },
+  }).lean();
+
+  const lessonAliasMap = new Map();
+  const registerLessonAliases = (lessonDoc) => {
+    if (!lessonDoc) return;
+    const seeds = [
+      lessonDoc._id,
+      lessonDoc.lessonId,
+      lessonDoc.slug,
+      lessonDoc.title,
+      String(lessonDoc._id),
+      String(lessonDoc.lessonId || ''),
+    ];
+    seeds.forEach((seed) => {
+      if (seed === undefined || seed === null) return;
+      const variants = createLookupVariants(seed);
+      variants.forEach((variant) => {
+        if (variant && !lessonAliasMap.has(variant)) {
+          lessonAliasMap.set(variant, lessonDoc);
+        }
+      });
+      const raw = String(seed).trim();
+      if (raw && !lessonAliasMap.has(raw)) {
+        lessonAliasMap.set(raw, lessonDoc);
+      }
+    });
+  };
+  lessonsInTrack.forEach(registerLessonAliases);
 
   console.log('[TRACK] startLesson: module alias map prepared', {
     trackId: String(trackProgress.trackId),
@@ -411,6 +447,63 @@ async function startLesson(userId, lessonId) {
             checkResults.push({ prereqId, type: 'module_code', ok: false });
             return false;
           }
+        }
+
+        const resolvedLessonDoc = (() => {
+          for (const variant of variantSet) {
+            if (lessonAliasMap.has(variant)) {
+              return lessonAliasMap.get(variant);
+            }
+          }
+          return null;
+        })();
+
+        if (resolvedLessonDoc) {
+          const parentModuleDoc = modulesInTrack.find(
+            (modDoc) => String(modDoc._id) === String(resolvedLessonDoc.moduleId)
+          );
+          const parentModuleProgress =
+            (parentModuleDoc &&
+              (findModuleProgressFor(parentModuleDoc) ||
+                findModuleProgressByIdentifier(trackProgress, parentModuleDoc) ||
+                trackProgress.modulesProgress.find(
+                  (mp) =>
+                    String(mp.moduleId) === String(parentModuleDoc._id) ||
+                    String(mp.moduleId) === String(parentModuleDoc.moduleId)
+                ))) ||
+            null;
+
+          const lessonProgressMatch =
+            parentModuleProgress?.lessonsProgress?.find((lp) => {
+              const lessonVariants = createLookupVariants(lp.lessonId);
+              return (
+                lessonVariants.some((v) => variantSet.has(v)) ||
+                String(lp.lessonId) === String(resolvedLessonDoc._id) ||
+                String(lp.lessonId) === String(resolvedLessonDoc.lessonId)
+              );
+            }) || null;
+
+          console.log('[TRACK] startLesson: lesson prerequisite check', {
+            prereqId,
+            resolvedLessonId: String(resolvedLessonDoc._id),
+            moduleId: String(resolvedLessonDoc.moduleId),
+            progressFound: !!lessonProgressMatch,
+            status: lessonProgressMatch?.status,
+          });
+
+          if (lessonProgressMatch?.status === 'completed') {
+            checkResults.push({ prereqId, type: 'lesson_doc', ok: true });
+            return true;
+          }
+
+          checkResults.push({
+            prereqId,
+            type: 'lesson_doc',
+            ok: false,
+            found: !!lessonProgressMatch,
+            status: lessonProgressMatch?.status || 'missing',
+          });
+          return false;
         }
 
         const allModuleProgresses = trackProgress.modulesProgress || [];

@@ -7,6 +7,7 @@ const {
   areAllTrackModulesCompleted,
   createTrackVariants,
   collectModuleIdentifierVariants,
+  findModuleProgressByIdentifier,
 } = require('../utils/track.utils');
 
 exports.getUserProgress = async (req, res) => {
