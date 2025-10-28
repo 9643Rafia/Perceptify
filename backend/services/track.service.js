@@ -77,11 +77,121 @@ async function startLesson(userId, lessonId) {
   const trackProgress = progress.tracksProgress.find(tp => String(tp.trackId) === String(module.trackId));
   if (!trackProgress) throw new Error('Please start the track first');
 
+  console.log('[TRACK] startLesson: incoming request', {
+    userId: String(userId),
+    lessonId: String(lessonId),
+    moduleId: String(module._id),
+    moduleCode: module.moduleId,
+    trackId: String(module.trackId),
+    lessonPrereqs: lesson.prerequisites || []
+  });
+  console.log('[TRACK] startLesson: existing module progresses', {
+    trackId: String(module.trackId),
+    modulesProgress: (trackProgress.modulesProgress || []).map(mp => ({
+      moduleId: String(mp.moduleId),
+      status: mp.status,
+      lessonsProgressCount: mp.lessonsProgress?.length || 0
+    }))
+  });
+
   const modulesInTrack = await Module.find({ trackId: module.trackId, status: 'active' }).sort({ order: 1 });
   const moduleIndexRaw = modulesInTrack.findIndex(mod => String(mod._id) === String(module._id));
   const moduleIndex = moduleIndexRaw === -1 ? 0 : moduleIndexRaw;
 
-  let moduleProgress = trackProgress.modulesProgress.find(mp => String(mp.moduleId) === String(module._id));
+  const buildModuleAliases = (modDoc) => {
+    const aliases = new Set();
+    if (!modDoc) return aliases;
+
+    const rawId = String(modDoc._id || '').trim();
+    if (rawId) {
+      aliases.add(rawId);
+      aliases.add(rawId.toLowerCase());
+    }
+
+    const moduleCode = String(modDoc.moduleId || '').trim();
+    if (moduleCode) {
+      const lower = moduleCode.toLowerCase();
+      aliases.add(moduleCode);
+      aliases.add(lower);
+      aliases.add(lower.replace(/^mod[-_]?/, 'module_'));
+      aliases.add(moduleCode.replace(/^MOD[-_]?/i, 'module_'));
+      aliases.add(lower.replace(/^module[-_]?/, 'module_'));
+      aliases.add(lower.replace(/[^a-z0-9]/g, ''));
+      aliases.add(moduleCode.replace(/[^a-zA-Z0-9]/g, ''));
+    }
+
+    return aliases;
+  };
+
+  const createLookupVariants = (value) => {
+    if (value === undefined || value === null) return [];
+    const raw = String(value).trim();
+    if (!raw) return [];
+    const lower = raw.toLowerCase();
+    return Array.from(
+      new Set([
+        raw,
+        lower,
+        raw.replace(/^MOD[-_]?/i, 'module_'),
+        lower.replace(/^mod[-_]?/, 'module_'),
+        raw.replace(/^MODULE[-_]?/i, 'module_'),
+        lower.replace(/^module[-_]?/, 'module_'),
+        raw.replace(/[^a-zA-Z0-9]/g, ''),
+        lower.replace(/[^a-z0-9]/g, '')
+      ])
+    ).filter(Boolean);
+  };
+
+  const moduleAliasMap = new Map();
+  modulesInTrack.forEach(modDoc => {
+    buildModuleAliases(modDoc).forEach(alias => {
+      if (!moduleAliasMap.has(alias)) {
+        moduleAliasMap.set(alias, modDoc);
+      }
+    });
+  });
+  console.log('[TRACK] startLesson: module alias map prepared', {
+    trackId: String(module.trackId),
+    modules: modulesInTrack.map(modDoc => ({
+      id: String(modDoc._id),
+      code: modDoc.moduleId,
+      aliases: Array.from(buildModuleAliases(modDoc))
+    }))
+  });
+
+  const findModuleProgressFor = (modDoc) => {
+    if (!modDoc) return null;
+    const targetAliases = buildModuleAliases(modDoc);
+    return (
+      trackProgress.modulesProgress?.find(mp => {
+        const mpAliases = new Set(createLookupVariants(mp.moduleId));
+        for (const alias of targetAliases) {
+          if (mpAliases.has(alias)) return true;
+        }
+        return false;
+      }) || null
+    );
+  };
+
+  let moduleProgress =
+    trackProgress.modulesProgress.find(mp => String(mp.moduleId) === String(module._id)) ||
+    findModuleProgressFor(module);
+  console.log('[TRACK] startLesson: resolved moduleProgress', {
+    moduleId: String(module._id),
+    moduleCode: module.moduleId,
+    status: moduleProgress?.status,
+    lessonsCount: moduleProgress?.lessonsProgress?.length || 0,
+    moduleAliases: Array.from(buildModuleAliases(module))
+  });
+  if (moduleProgress?.lessonsProgress?.length) {
+    console.log('[TRACK] startLesson: existing lessonsProgress snapshot', {
+      lessons: moduleProgress.lessonsProgress.map(lp => ({
+        lessonId: String(lp.lessonId),
+        status: lp.status,
+        completedAt: lp.completedAt
+      }))
+    });
+  }
   if (!moduleProgress) {
     const previousModuleId = moduleIndex > 0 ? String(modulesInTrack[moduleIndex - 1]._id) : null;
     const previousModuleProgress = previousModuleId
@@ -112,19 +222,94 @@ async function startLesson(userId, lessonId) {
   if (!lessonProgress) {
     // Check prerequisites
     if (lesson.prerequisites?.length > 0) {
+      const checkResults = [];
       const prerequisitesCompleted = lesson.prerequisites.every(prereqId => {
         // Check if it's a module prerequisite (ObjectId format)
         if (prereqId.match(/^[0-9a-fA-F]{24}$/)) {
           // It's a module ObjectId - check if that module is completed
-          const prereqModuleProgress = trackProgress.modulesProgress.find(mp => String(mp.moduleId) === String(prereqId));
-          return prereqModuleProgress && prereqModuleProgress.status === 'completed';
+          const variants = createLookupVariants(prereqId);
+          const moduleDoc =
+            variants.map(v => moduleAliasMap.get(v)).find(Boolean) ||
+            modulesInTrack.find(m => String(m._id) === String(prereqId)) ||
+            null;
+          console.log('[TRACK] startLesson: module prerequisite check (ObjectId)', {
+            prereqId,
+            variants,
+            foundModule: moduleDoc ? { id: String(moduleDoc._id), code: moduleDoc.moduleId } : null
+          });
+          const prereqModuleProgress = moduleDoc
+            ? findModuleProgressFor(moduleDoc)
+            : trackProgress.modulesProgress.find(mp => String(mp.moduleId) === String(prereqId));
+          console.log('[TRACK] startLesson: module prerequisite progress', {
+            prereqId,
+            status: prereqModuleProgress?.status,
+            exists: !!prereqModuleProgress
+          });
+          const ok = prereqModuleProgress && prereqModuleProgress.status === 'completed';
+          checkResults.push({ prereqId, type: 'module_objectId', ok });
+          return ok;
         } else {
-          // It's a lesson prerequisite - check if that lesson is completed
-          const prereqProgress = moduleProgress.lessonsProgress.find(lp => String(lp.lessonId) === String(prereqId));
-          return prereqProgress && prereqProgress.status === 'completed';
+          // Try module alias lookup (handles codes like MOD-1.1 or module_1.1)
+          const variants = createLookupVariants(prereqId);
+          const variantSet = new Set(variants);
+          for (const variant of variants) {
+            const prereqModuleDoc = moduleAliasMap.get(variant);
+            if (prereqModuleDoc) {
+              const prereqModuleProgress = findModuleProgressFor(prereqModuleDoc);
+              console.log('[TRACK] startLesson: module code prerequisite check', {
+                prereqId,
+                variant,
+                module: { id: String(prereqModuleDoc._id), code: prereqModuleDoc.moduleId },
+                status: prereqModuleProgress?.status
+              });
+              if (prereqModuleProgress && prereqModuleProgress.status === 'completed') {
+                checkResults.push({ prereqId, type: 'module_code', ok: true });
+                return true;
+              }
+              checkResults.push({ prereqId, type: 'module_code', ok: false });
+              return false;
+            }
+          }
+
+          // Fallback: treat as lesson prerequisite (within any module in the track)
+          const allModuleProgresses = trackProgress.modulesProgress || [];
+          for (const mp of allModuleProgresses) {
+            const matchedLesson = (mp.lessonsProgress || []).find(lp => {
+              const lessonVariants = createLookupVariants(lp.lessonId);
+              return lessonVariants.some(v => variantSet.has(v));
+            });
+            if (matchedLesson) {
+              console.log('[TRACK] startLesson: lesson prerequisite match', {
+                prereqId,
+                moduleId: String(mp.moduleId),
+                lessonId: matchedLesson.lessonId,
+                status: matchedLesson.status
+              });
+            }
+            if (matchedLesson && matchedLesson.status === 'completed') {
+              checkResults.push({ prereqId, type: 'lesson', ok: true });
+              return true;
+            }
+          }
+
+          // No prerequisites satisfied
+          checkResults.push({ prereqId, type: 'unknown', ok: false });
+          return false;
         }
       });
-      if (!prerequisitesCompleted) throw new Error('Prerequisites not completed');
+      console.log('[TRACK] startLesson: prerequisite summary', {
+        lessonId: String(lesson._id),
+        lessonName: lesson.title || lesson.name,
+        results: checkResults,
+        passed: prerequisitesCompleted
+      });
+      if (!prerequisitesCompleted) {
+        console.log('[TRACK] startLesson: blocking lesson start due to unmet prerequisites', {
+          lessonId: String(lesson._id),
+          lessonName: lesson.title || lesson.name
+        });
+        throw new Error('Prerequisites not completed');
+      }
     }
 
     lessonProgress = {

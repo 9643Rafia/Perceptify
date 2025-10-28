@@ -61,6 +61,18 @@ const LearningDashboard = () => {
       setBadges(badgesData);
       setProgress(progressData);
 
+      try {
+        if (typeof window !== 'undefined') {
+          if (progressData) {
+            localStorage.setItem('progress', JSON.stringify(progressData));
+          } else {
+            localStorage.removeItem('progress');
+          }
+        }
+      } catch (storageErr) {
+        console.warn('📦 LearningDashboard: Failed to sync progress to localStorage', storageErr);
+      }
+
       console.log('📊 LearningDashboard: State updated, tracks count:', tracksData?.length);
     } catch (err) {
       setError('Failed to load dashboard data');
