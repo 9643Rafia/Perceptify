@@ -7,6 +7,7 @@ const {
   findTrackProgressByIdentifier,
   uniqueModuleTrackVariants,
   createTrackVariants,
+  findModuleProgressByIdentifier,
 } = require('../utils/track.utils');
 
 // Ensures the entire lesson-progress hierarchy exists for user
@@ -80,11 +81,11 @@ async function ensureLessonProgress(userId, lessonId) {
   const moduleIndex = moduleIndexRaw === -1 ? 0 : moduleIndexRaw;
 
   // Module
-  let moduleProgress = trackProgress.modulesProgress.find(mp => String(mp.moduleId) === String(module._id));
+  let moduleProgress = findModuleProgressByIdentifier(trackProgress, module);
   if (!moduleProgress) {
-    const previousModuleId = moduleIndex > 0 ? String(modulesInTrack[moduleIndex - 1]._id) : null;
-    const previousModuleProgress = previousModuleId
-      ? trackProgress.modulesProgress.find(mp => String(mp.moduleId) === previousModuleId)
+    const previousModuleDoc = moduleIndex > 0 ? modulesInTrack[moduleIndex - 1] : null;
+    const previousModuleProgress = previousModuleDoc
+      ? findModuleProgressByIdentifier(trackProgress, previousModuleDoc)
       : null;
     const canUnlock = moduleIndex === 0 || (previousModuleProgress && previousModuleProgress.status === 'completed');
 

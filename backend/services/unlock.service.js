@@ -5,6 +5,7 @@ const {
   findTrackProgressByIdentifier,
   uniqueModuleTrackVariants,
   createTrackVariants,
+  findModuleProgressByIdentifier,
 } = require('../utils/track.utils');
 
 // Unlock next lesson
@@ -59,7 +60,7 @@ async function unlockNextModule(progress, module, moduleProgress) {
     }).sort({ order: 1 });
 
     if (nextModule) {
-      let nextModuleProgress = trackProgress.modulesProgress.find(mp => String(mp.moduleId) === String(nextModule._id));
+      let nextModuleProgress = findModuleProgressByIdentifier(trackProgress, nextModule);
       if (!nextModuleProgress) {
         nextModuleProgress = {
           moduleId: nextModule._id,

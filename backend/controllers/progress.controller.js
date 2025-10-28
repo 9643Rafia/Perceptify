@@ -1,6 +1,11 @@
 const { ensureLessonProgress } = require('../services/progress.service');
 const { unlockNextLesson, unlockNextModule } = require('../services/unlock.service');
 const Progress = require('../models/progress.model');
+const {
+  prepareTrackMatchingContext,
+  findTrackProgressByIdentifier,
+  areAllTrackModulesCompleted,
+} = require('../utils/track.utils');
 
 exports.getUserProgress = async (req, res) => {
   try {
@@ -18,21 +23,54 @@ exports.getUserProgress = async (req, res) => {
     if (!Array.isArray(progress.tracksProgress)) {
       progress.tracksProgress = [];
     }
+    let progressChanged = false;
     for (const tp of progress.tracksProgress) {
       if (!Array.isArray(tp.modulesProgress)) {
         tp.modulesProgress = [];
+        progressChanged = true;
       }
       for (const mp of tp.modulesProgress) {
         if (!Array.isArray(mp.lessonsProgress)) {
           mp.lessonsProgress = [];
+          progressChanged = true;
         }
         if (!Array.isArray(mp.quizAttempts)) {
           mp.quizAttempts = [];
+          progressChanged = true;
         }
         if (!Array.isArray(mp.labAttempts)) {
           mp.labAttempts = [];
+          progressChanged = true;
         }
       }
+    }
+
+    const context = await prepareTrackMatchingContext(progress);
+
+    for (const tp of progress.tracksProgress) {
+      const match = findTrackProgressByIdentifier(context, tp.trackId);
+      const trackDoc = match.track || null;
+
+      if (tp.status !== 'completed') {
+        try {
+          const allDone = await areAllTrackModulesCompleted(tp, trackDoc, tp.trackId);
+          if (allDone) {
+            tp.status = 'completed';
+            tp.completedAt = tp.completedAt || new Date();
+            progressChanged = true;
+          }
+        } catch (err) {
+          console.warn('[PROGRESS] Unable to evaluate track completion', {
+            trackId: tp.trackId,
+            error: err?.message || err,
+          });
+        }
+      }
+    }
+
+    if (progressChanged) {
+      progress.markModified('tracksProgress');
+      await progress.save();
     }
 
     res.json(progress);
@@ -145,4 +183,3 @@ exports.completeLesson = async (req, res) => {
     res.status(500).json({ message: err.message || 'Server error' });
   }
 };
-

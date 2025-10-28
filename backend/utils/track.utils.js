@@ -1,4 +1,5 @@
 const Track = require('../models/track.model');
+const Module = require('../models/module.model');
 
 const toSlug = (value) =>
   String(value || '')
@@ -223,6 +224,190 @@ const ensureTrackProgressEntry = (progress, context, identifier, defaults = {}) 
   return { trackProgress, track };
 };
 
+const normalizeModuleId = (value) =>
+  String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+
+const collectModuleIdentifierVariants = (moduleLike) => {
+  const variants = new Set();
+  const seen = new WeakSet();
+
+  const pushValue = (input) => {
+    if (input === undefined || input === null) return;
+
+    if (input instanceof Set) {
+      if (seen.has(input)) return;
+      seen.add(input);
+      input.forEach(pushValue);
+      return;
+    }
+
+    if (input instanceof Map) {
+      if (seen.has(input)) return;
+      seen.add(input);
+      input.forEach((value, key) => {
+        pushValue(key);
+        pushValue(value);
+      });
+      return;
+    }
+
+    if (Array.isArray(input)) {
+      if (seen.has(input)) return;
+      seen.add(input);
+      input.forEach(pushValue);
+      return;
+    }
+
+    const valueType = typeof input;
+    if (valueType === 'string' || valueType === 'number' || valueType === 'bigint') {
+      const normalized = normalizeModuleId(input);
+      if (normalized) variants.add(normalized);
+      return;
+    }
+
+    if (valueType === 'object') {
+      if (seen.has(input)) return;
+      seen.add(input);
+
+      if (typeof input.toHexString === 'function') {
+        pushValue(input.toHexString());
+      } else if (typeof input.valueOf === 'function') {
+        const valueOf = input.valueOf();
+        if (valueOf !== input) pushValue(valueOf);
+      } else if (typeof input.toString === 'function') {
+        try {
+          const strValue = input.toString();
+          if (
+            strValue &&
+            strValue !== input &&
+            strValue !== '[object Object]' &&
+            strValue !== '[object MongooseDocument]' &&
+            strValue !== '[object ObjectId]'
+          ) {
+            pushValue(strValue);
+          }
+        } catch (err) {
+          // ignore conversion errors
+        }
+      }
+
+      const fields = [
+        '_id',
+        'id',
+        'moduleId',
+        'module_id',
+        'moduleCode',
+        'moduleSlug',
+        'slug',
+        'code',
+        'legacyId',
+        'identifier',
+        'externalId',
+        'alias',
+        'aliases',
+        'module',
+        'moduleRef',
+      ];
+
+      fields.forEach((field) => {
+        if (input[field] !== undefined && input[field] !== null) {
+          pushValue(input[field]);
+        }
+      });
+
+      return;
+    }
+
+    const normalized = normalizeModuleId(input);
+    if (normalized) variants.add(normalized);
+  };
+
+  pushValue(moduleLike);
+
+  return Array.from(variants);
+};
+
+const findModuleProgressByIdentifier = (trackProgress, moduleIdentifier) => {
+  if (!trackProgress) return null;
+
+  const targetVariants = new Set(collectModuleIdentifierVariants(moduleIdentifier));
+  if (!targetVariants.size) return null;
+
+  const modulesProgress = Array.isArray(trackProgress.modulesProgress)
+    ? trackProgress.modulesProgress
+    : [];
+
+  for (const moduleProgress of modulesProgress) {
+    const progressVariants = collectModuleIdentifierVariants(moduleProgress);
+    for (const variant of progressVariants) {
+      if (targetVariants.has(variant)) {
+        return moduleProgress;
+      }
+    }
+  }
+
+  return null;
+};
+
+const collectTrackVariantsForModules = (trackDoc, rawTrackId) => {
+  const variants = new Set([
+    ...createTrackVariants(rawTrackId),
+  ]);
+
+  if (trackDoc) {
+    createTrackVariants(trackDoc.trackId).forEach((variant) =>
+      variants.add(variant)
+    );
+    createTrackVariants(trackDoc._id).forEach((variant) =>
+      variants.add(variant)
+    );
+    uniqueModuleTrackVariants(trackDoc).forEach((variant) =>
+      variants.add(variant)
+    );
+  }
+
+  return Array.from(variants);
+};
+
+const areAllTrackModulesCompleted = async (trackProgress, trackDoc, rawTrackId) => {
+  if (!trackProgress) return false;
+
+  const trackVariants = collectTrackVariantsForModules(trackDoc, rawTrackId);
+  const modules = await Module.find({
+    status: 'active',
+    trackId: { $in: trackVariants },
+  }).lean();
+
+  if (!modules.length) {
+    console.warn('[TRACK UTILS] No modules found when evaluating track completion', {
+      trackId: rawTrackId,
+      trackDocId: trackDoc?._id,
+      variants: trackVariants,
+    });
+    return false;
+  }
+
+  const completedIds = new Set();
+  (trackProgress.modulesProgress || [])
+    .filter((mp) => mp.status === 'completed')
+    .forEach((mp) => {
+      collectModuleIdentifierVariants(mp).forEach((variant) => completedIds.add(variant));
+      if (mp.moduleId) {
+        collectModuleIdentifierVariants(mp.moduleId).forEach((variant) =>
+          completedIds.add(variant)
+        );
+      }
+    });
+
+  return modules.every((mod) => {
+    const candidates = collectModuleIdentifierVariants(mod);
+    return candidates.some((id) => completedIds.has(id));
+  });
+};
+
 module.exports = {
   createTrackVariants,
   buildTrackAliases,
@@ -231,4 +416,9 @@ module.exports = {
   ensureTrackProgressEntry,
   attachTrackProgressToContext,
   uniqueModuleTrackVariants,
+  areAllTrackModulesCompleted,
+  collectTrackVariantsForModules,
+  normalizeModuleId,
+  collectModuleIdentifierVariants,
+  findModuleProgressByIdentifier,
 };

@@ -11,6 +11,8 @@ const {
   uniqueModuleTrackVariants,
   createTrackVariants,
   attachTrackProgressToContext,
+  areAllTrackModulesCompleted,
+  findModuleProgressByIdentifier,
 } = require('../utils/track.utils');
 
 // ---------- helpers ----------
@@ -61,7 +63,6 @@ async function findModuleFlexible(ref) {
 }
 
 /** String compare helper for ObjectId/string mixes */
-const eqId = (a, b) => String(a) === String(b);
 
 // ========== QUIZ CONTROLLERS ==========
 
@@ -105,22 +106,20 @@ exports.getQuizById = async (req, res) => {
             module.trackId
           );
           const trackProgress = trackMatch.trackProgress || null;
+          const moduleProgress = trackProgress
+            ? findModuleProgressByIdentifier(trackProgress, module)
+            : null;
 
-          if (trackProgress) {
-            const moduleProgress =
-              trackProgress.modulesProgress?.find((mp) => eqId(mp.moduleId, module._id)) || null;
-
-            if (moduleProgress) {
-              previousAttempts =
-                moduleProgress.quizAttempts?.map((qa) => ({
-                  attemptNumber: qa.attemptNumber,
-                  score: qa.score,
-                  passed: qa.passed,
-                  completedAt: qa.completedAt,
-                })) || [];
-              attemptsRemaining =
-                quiz.attempts === -1 ? -1 : Math.max(0, quiz.attempts - previousAttempts.length);
-            }
+          if (moduleProgress) {
+            previousAttempts =
+              moduleProgress.quizAttempts?.map((qa) => ({
+                attemptNumber: qa.attemptNumber,
+                score: qa.score,
+                passed: qa.passed,
+                completedAt: qa.completedAt,
+              })) || [];
+            attemptsRemaining =
+              quiz.attempts === -1 ? -1 : Math.max(0, quiz.attempts - previousAttempts.length);
           }
         }
       }
@@ -194,10 +193,8 @@ exports.submitQuiz = async (req, res) => {
         return res.status(400).json({ message: 'You must start the track first' });
       }
 
-      // Find this module's progress by module _id (not moduleId code)
-      moduleProgress = (trackProgress.modulesProgress || []).find(
-        (mp) => String(mp.moduleId) === String(moduleDoc._id)
-      );
+      // Find this module's progress using identifier variants
+      moduleProgress = findModuleProgressByIdentifier(trackProgress, moduleDoc);
       if (!moduleProgress) {
         return res.status(400).json({ message: 'You must start the module first' });
       }
@@ -285,7 +282,11 @@ exports.submitQuiz = async (req, res) => {
           moduleProgress.completedAt = new Date();
 
           // Check if all modules in this track are now completed
-          const allModulesInTrackCompleted = trackProgress.modulesProgress.every((mp) => mp.status === 'completed');
+          const allModulesInTrackCompleted = await areAllTrackModulesCompleted(
+            trackProgress,
+            track,
+            moduleDoc.trackId
+          );
           if (allModulesInTrackCompleted && trackProgress.status !== 'completed') {
             trackProgress.status = 'completed';
             trackProgress.completedAt = new Date();
@@ -343,9 +344,7 @@ exports.submitQuiz = async (req, res) => {
         if (nextModule && trackProgress) {
           if (!Array.isArray(trackProgress.modulesProgress)) trackProgress.modulesProgress = [];
 
-          let nextMp = trackProgress.modulesProgress.find(
-            (mp) => String(mp.moduleId) === String(nextModule._id)
-          );
+          let nextMp = findModuleProgressByIdentifier(trackProgress, nextModule);
 
           if (!nextMp) {
             nextMp = {
@@ -447,20 +446,19 @@ exports.getLabById = async (req, res) => {
             module.trackId
           );
           const trackProgress = trackMatch.trackProgress || null;
-          if (trackProgress) {
-            const moduleProgress =
-              trackProgress.modulesProgress?.find((mp) => eqId(mp.moduleId, module._id)) || null;
-            if (moduleProgress) {
-              previousAttempts =
-                moduleProgress.labAttempts
-                  ?.filter((la) => la.labId === labId)
-                  .map((la) => ({
-                    attemptNumber: la.attemptNumber,
-                    score: la.score,
-                    passed: la.passed,
-                    completedAt: la.completedAt,
-                  })) || [];
-            }
+          const moduleProgress = trackProgress
+            ? findModuleProgressByIdentifier(trackProgress, module)
+            : null;
+          if (moduleProgress) {
+            previousAttempts =
+              moduleProgress.labAttempts
+                ?.filter((la) => la.labId === labId)
+                .map((la) => ({
+                  attemptNumber: la.attemptNumber,
+                  score: la.score,
+                  passed: la.passed,
+                  completedAt: la.completedAt,
+                })) || [];
           }
         }
       }
@@ -502,12 +500,18 @@ exports.submitLab = async (req, res) => {
       module.trackId
     );
     const trackProgress = trackMatch.trackProgress || null;
+    let trackDoc =
+      trackMatch.track ||
+      (await Track.findOne({
+        status: 'active',
+        $or: [{ _id: module.trackId }, { trackId: module.trackId }],
+      })) ||
+      null;
     if (!trackProgress) {
       return res.status(400).json({ message: 'You must start the track first' });
     }
 
-    const moduleProgress =
-      trackProgress.modulesProgress?.find((mp) => eqId(mp.moduleId, module._id)) || null;
+    let moduleProgress = findModuleProgressByIdentifier(trackProgress, module);
     if (!moduleProgress) {
       return res.status(400).json({ message: 'You must start the module first' });
     }
@@ -572,6 +576,64 @@ exports.submitLab = async (req, res) => {
       if (module.requiresLabCompletion && moduleProgress.status !== 'completed') {
         moduleProgress.status = 'completed';
         moduleProgress.completedAt = new Date();
+      }
+    }
+
+    if (moduleProgress.status === 'completed') {
+      const allModulesCompleted = await areAllTrackModulesCompleted(
+        trackProgress,
+        trackDoc,
+        module.trackId
+      );
+      if (allModulesCompleted && trackProgress.status !== 'completed') {
+        trackProgress.status = 'completed';
+        trackProgress.completedAt = new Date();
+        console.log('[LAB] submitLab: track completed:', String(module.trackId));
+
+        if (!trackDoc) {
+          trackDoc =
+            (await Track.findOne({
+              status: 'active',
+              $or: [{ _id: trackProgress.trackId }, { trackId: trackProgress.trackId }],
+            })) || null;
+        }
+
+        if (trackDoc) {
+          const nextTrack = await Track.findOne({
+            status: 'active',
+            order: { $gt: trackDoc.order },
+          }).sort({ order: 1 });
+
+          if (nextTrack) {
+            const nextTrackMatch = findTrackProgressByIdentifier(
+              trackContext,
+              nextTrack._id
+            );
+            let nextTrackProgress = nextTrackMatch.trackProgress;
+
+            if (!nextTrackProgress) {
+              nextTrackProgress = {
+                trackId: nextTrack._id,
+                status: 'unlocked',
+                modulesProgress: [],
+                startedAt: new Date(),
+              };
+              progress.tracksProgress.push(nextTrackProgress);
+              attachTrackProgressToContext(trackContext, nextTrackProgress, nextTrack);
+              console.log(
+                '[LAB] submitLab: created progress for next track and unlocked:',
+                String(nextTrack._id)
+              );
+            } else if (nextTrackProgress.status === 'locked' || !nextTrackProgress.status) {
+              nextTrackProgress.status = 'unlocked';
+              nextTrackProgress.startedAt = nextTrackProgress.startedAt || new Date();
+              console.log(
+                '[LAB] submitLab: unlocked existing next track progress:',
+                String(nextTrack._id)
+              );
+            }
+          }
+        }
       }
     }
 

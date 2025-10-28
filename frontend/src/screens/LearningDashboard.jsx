@@ -421,16 +421,16 @@ const LearningDashboard = () => {
                     </div>
 
                     {!unlocked ? (
-                      <Button variant="secondary" disabled block>
+                      <Button variant="secondary" disabled className="w-100">
                         🔒 Locked
                       </Button>
                     ) : trackProgress?.status === 'completed' ? (
-                      <Button variant="success" onClick={() => navigate(`/course/${track._id}`)} block>
+                      <Button variant="success" onClick={() => navigate(`/course/${track._id}`)} className="w-100">
                         <FaTrophy className="me-2" />
                         View Certificate
                       </Button>
                     ) : trackProgress ? (
-                      <Button variant="primary" onClick={() => navigate(`/course/${track._id}`)} block>
+                      <Button variant="primary" onClick={() => navigate(`/course/${track._id}`)} className="w-100">
                         Continue Track
                       </Button>
                     ) : (

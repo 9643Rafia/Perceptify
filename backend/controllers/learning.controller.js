@@ -5,6 +5,14 @@ const Content = require('../models/content.model');
 const Quiz = require('../models/quiz.model');
 const Progress = require('../models/progress.model');
 const Lab = require('../models/lab.model');
+const {
+  prepareTrackMatchingContext,
+  findTrackProgressByIdentifier,
+  uniqueModuleTrackVariants,
+  createTrackVariants,
+  areAllTrackModulesCompleted,
+  findModuleProgressByIdentifier,
+} = require('../utils/track.utils');
 
 // ========== TRACK CONTROLLERS ==========
 
@@ -37,8 +45,16 @@ exports.getTrackById = async (req, res) => {
       return res.status(404).json({ message: 'Track not found' });
     }
 
-    // Get modules for this track. Compare using String() to avoid ObjectId vs string mismatches.
-    const modules = await Module.find({ trackId: String(track._id), status: 'active' }).sort({ order: 1 });
+    const moduleTrackVariants = uniqueModuleTrackVariants(track);
+    if (!moduleTrackVariants.length) {
+      moduleTrackVariants.push(String(track._id));
+      if (track.trackId) moduleTrackVariants.push(String(track.trackId));
+    }
+
+    const modules = await Module.find({
+      trackId: { $in: Array.from(new Set(moduleTrackVariants)) },
+      status: 'active'
+    }).sort({ order: 1 });
     console.log('🎯 GET TRACK BY ID - Found modules:', modules.length);
 
     // Get user progress if authenticated
@@ -47,18 +63,27 @@ exports.getTrackById = async (req, res) => {
       const progress = await Progress.findOne({ userId: req.user._id });
       console.log('🎯 GET TRACK BY ID - User progress loaded:', !!progress);
 
-      if (progress?.tracksProgress?.length) {
-        const tid = String(track._id);
-        trackProgress = progress.tracksProgress.find(tp => String(tp.trackId) === tid) || null;
+      if (progress) {
+        const context = await prepareTrackMatchingContext(progress);
+        const match = findTrackProgressByIdentifier(context, track._id) ||
+          findTrackProgressByIdentifier(context, track.trackId);
 
-        // Normalize nested moduleId types to strings for the client (optional but helpful)
-        if (trackProgress?.modulesProgress?.length) {
+        if (match.trackProgress) {
+          const computedCompleted = await areAllTrackModulesCompleted(
+            match.trackProgress,
+            match.track || track,
+            match.track?.trackId || track.trackId || track._id
+          );
+
+          const normalizedModules = (match.trackProgress.modulesProgress || []).map((mp) => ({
+            ...mp.toObject?.() || mp,
+            moduleId: String(mp.moduleId),
+          }));
+
           trackProgress = {
-            ...trackProgress.toObject?.() || trackProgress,
-            modulesProgress: trackProgress.modulesProgress.map(mp => ({
-              ...mp.toObject?.() || mp,
-              moduleId: String(mp.moduleId),
-            })),
+            ...match.trackProgress.toObject?.() || match.trackProgress,
+            status: computedCompleted ? 'completed' : match.trackProgress.status,
+            modulesProgress: normalizedModules,
           };
         }
       }
@@ -80,8 +105,11 @@ exports.getModulesByTrack = async (req, res) => {
   try {
     const { trackId } = req.params;
 
-    // Fetch modules using the same String() form used in your seed data
-    const modules = await Module.find({ trackId: String(trackId), status: 'active' }).sort({ order: 1 });
+    const trackIdVariants = Array.from(new Set(createTrackVariants(trackId)));
+    const modules = await Module.find({
+      trackId: trackIdVariants.length ? { $in: trackIdVariants } : trackId,
+      status: 'active'
+    }).sort({ order: 1 });
 
     // Build userProgress = the module progress array for this track (if any)
     let userProgress = null;
@@ -89,12 +117,11 @@ exports.getModulesByTrack = async (req, res) => {
     if (req.user) {
       const progress = await Progress.findOne({ userId: req.user._id });
 
-      if (progress?.tracksProgress?.length) {
-        // trackId can be ObjectId on the progress side; normalize both to strings
-        const tp = progress.tracksProgress.find(tp => String(tp.trackId) === String(trackId));
-        if (tp?.modulesProgress?.length) {
-          // Return module progresses normalized (moduleId as string) to help the client match
-          userProgress = tp.modulesProgress.map(mp => ({
+      if (progress) {
+        const context = await prepareTrackMatchingContext(progress);
+        const match = findTrackProgressByIdentifier(context, trackId);
+        if (match.trackProgress?.modulesProgress?.length) {
+          userProgress = match.trackProgress.modulesProgress.map(mp => ({
             ...mp.toObject?.() || mp,
             moduleId: String(mp.moduleId),
           }));
@@ -137,32 +164,17 @@ exports.getModuleById = async (req, res) => {
     if (req.user) {
       const progress = await Progress.findOne({ userId: req.user._id });
       console.log('🎯 Fetched user progress for module:', progress);
-      if (progress?.tracksProgress?.length) {
-        console.log("🧠 User progress tracks:", progress.tracksProgress);
-        const targetTrackId = String(module.trackId); // Normalize track ID
-        console.log("🧠 Progress tracks:", progress.tracksProgress.map(tp => tp.trackId), "Target track:", targetTrackId);
-        const trackProgress = progress.tracksProgress.find(tp => {
-          const storedTrackId = tp.trackId?.toString?.() || String(tp.trackId || '');
-          return storedTrackId === targetTrackId;
-        });
+      if (progress) {
+        const context = await prepareTrackMatchingContext(progress);
+        const match = findTrackProgressByIdentifier(context, module.trackId);
 
-        if (trackProgress?.modulesProgress?.length) {
-          const targetModuleId = String(module._id);
-
-          console.log(
-            "🧩 Checking module match:",
-            trackProgress.modulesProgress.map(mp => mp.moduleId?.toString?.() || mp.moduleId),
-            "vs target",
-            targetModuleId
+        if (match.trackProgress?.modulesProgress?.length) {
+          const foundModule = findModuleProgressByIdentifier(
+            match.trackProgress,
+            module
           );
-
-          const foundModule = trackProgress.modulesProgress.find(mp => {
-            const storedModuleId = mp.moduleId?.toString?.() || String(mp.moduleId || '');
-            return storedModuleId === targetModuleId;
-          });
-
           if (foundModule) {
-            moduleProgress = foundModule;
+            moduleProgress = foundModule.toObject?.() || foundModule;
           }
         }
       }
@@ -219,10 +231,14 @@ exports.getLessonsByModule = async (req, res) => {
       if (progress) {
         const module = await Module.findById(moduleId);
         if (module) {
-          const trackProgress = progress.tracksProgress.find(tp => tp.trackId === module.trackId);
+          const trackContext = await prepareTrackMatchingContext(progress);
+          const match = findTrackProgressByIdentifier(trackContext, module.trackId);
+          const trackProgress = match.trackProgress;
           if (trackProgress) {
-            const moduleProgress = trackProgress.modulesProgress.find(mp => mp.moduleId === moduleId);
-            if (moduleProgress) {
+            const moduleProgressDoc = findModuleProgressByIdentifier(trackProgress, module);
+            if (moduleProgressDoc?.lessonsProgress?.length) {
+              const moduleProgress =
+                moduleProgressDoc.toObject?.() || moduleProgressDoc;
               lessonsProgress = moduleProgress.lessonsProgress;
             }
           }
@@ -323,11 +339,20 @@ exports.getLessonById = async (req, res) => {
       if (progress) {
         const module = await Module.findById(lesson.moduleId);
         if (module) {
-          const trackProgress = progress.tracksProgress.find(tp => tp.trackId === module.trackId);
+          const trackContext = await prepareTrackMatchingContext(progress);
+          const match = findTrackProgressByIdentifier(trackContext, module.trackId);
+          const trackProgress = match.trackProgress;
           if (trackProgress) {
-            const moduleProgress = trackProgress.modulesProgress.find(mp => mp.moduleId === lesson.moduleId);
-            if (moduleProgress) {
-              lessonProgress = moduleProgress.lessonsProgress.find(lp => String(lp.lessonId) === String(lesson._id) || String(lp.lessonId) === String(lesson.lessonId));
+            const moduleProgressDoc = findModuleProgressByIdentifier(trackProgress, module);
+            if (moduleProgressDoc?.lessonsProgress?.length) {
+              const moduleProgress =
+                moduleProgressDoc.toObject?.() || moduleProgressDoc;
+              const lessonsArray = moduleProgress.lessonsProgress || [];
+              lessonProgress = lessonsArray.find(
+                lp =>
+                  String(lp.lessonId) === String(lesson._id) ||
+                  String(lp.lessonId) === String(lesson.lessonId)
+              );
             }
           }
         }
@@ -397,6 +422,8 @@ exports.getNextContent = async (req, res) => {
       });
     }
 
+    const trackContext = await prepareTrackMatchingContext(progress);
+
     // Find next content based on current progress
     const currentLesson = await Lesson.findById(progress.currentLesson);
     const currentModule = await Module.findById(currentLesson.moduleId);
@@ -420,11 +447,21 @@ exports.getNextContent = async (req, res) => {
 
     // No more lessons in this module, check for module quiz
     if (currentModule.quizId) {
-      // Check if quiz is completed
-      const trackProgress = progress.tracksProgress.find(tp => tp.trackId === currentModule.trackId);
-      const moduleProgress = trackProgress?.modulesProgress.find(mp => mp.moduleId === currentModule._id);
+      const { trackProgress } = findTrackProgressByIdentifier(
+        trackContext,
+        currentModule.trackId
+      );
+      const moduleProgress = trackProgress
+        ? findModuleProgressByIdentifier(trackProgress, currentModule)
+        : null;
+      const quizAttempts = Array.isArray(moduleProgress?.quizAttempts)
+        ? moduleProgress.quizAttempts
+        : [];
 
-      if (!moduleProgress || moduleProgress.quizAttempts.length === 0 || !moduleProgress.quizAttempts.some(qa => qa.passed)) {
+      if (
+        !quizAttempts.length ||
+        !quizAttempts.some((qa) => qa && qa.passed)
+      ) {
         return res.json({
           type: 'quiz',
           track: await Track.findOne({ _id: currentModule.trackId }),

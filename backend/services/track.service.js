@@ -9,6 +9,8 @@ const {
   createTrackVariants,
   buildTrackAliases,
   uniqueModuleTrackVariants,
+  areAllTrackModulesCompleted,
+  findModuleProgressByIdentifier,
 } = require('../utils/track.utils');
 
 async function startTrack(userId, trackId) {
@@ -25,12 +27,35 @@ async function startTrack(userId, trackId) {
 
   // Check prerequisites
   if (track.prerequisites?.length > 0) {
-    const prerequisitesCompleted = track.prerequisites.every((prereqId) => {
-      const { trackProgress: prereqProgress } = findTrackProgressByIdentifier(
-        trackContext,
-        prereqId
-      );
-      const satisfied = prereqProgress && prereqProgress.status === 'completed';
+    let prerequisitesCompleted = true;
+    for (const prereqId of track.prerequisites) {
+      const match = findTrackProgressByIdentifier(trackContext, prereqId);
+      const prereqProgress = match.trackProgress;
+      const prereqTrackDoc = match.track;
+
+      let satisfied =
+        prereqProgress && prereqProgress.status === 'completed';
+
+      if (!satisfied && prereqProgress) {
+        try {
+          const allModulesDone = await areAllTrackModulesCompleted(
+            prereqProgress,
+            prereqTrackDoc,
+            prereqId
+          );
+          if (allModulesDone) {
+            prereqProgress.status = 'completed';
+            prereqProgress.completedAt = prereqProgress.completedAt || new Date();
+            satisfied = true;
+          }
+        } catch (err) {
+          console.warn('[TRACK] startTrack: failed to evaluate prerequisite modules', {
+            prereqId,
+            error: err?.message || err,
+          });
+        }
+      }
+
       if (!satisfied) {
         console.log('[TRACK] startTrack: prerequisite not met', {
           userId: String(userId),
@@ -39,9 +64,11 @@ async function startTrack(userId, trackId) {
           found: !!prereqProgress,
           status: prereqProgress?.status,
         });
+        prerequisitesCompleted = false;
+        break;
       }
-      return satisfied;
-    });
+    }
+
     if (!prerequisitesCompleted) throw new Error('Prerequisites not completed');
   }
 
@@ -67,7 +94,7 @@ async function startTrack(userId, trackId) {
     trackId: { $in: Array.from(moduleTrackIds) },
   }).sort({ order: 1 });
   allModules.forEach((mod, index) => {
-    let moduleProgress = trackProgress.modulesProgress.find(mp => String(mp.moduleId) === String(mod._id));
+    let moduleProgress = findModuleProgressByIdentifier(trackProgress, mod);
     if (!moduleProgress) {
       moduleProgress = {
         moduleId: mod._id,
@@ -89,7 +116,9 @@ async function startTrack(userId, trackId) {
 
   progress.currentTrack = track._id;
   progress.currentModule = allModules.length ? allModules[0]._id : null;
-  trackProgress.status = 'in_progress';
+  if (trackProgress.status !== 'completed') {
+    trackProgress.status = 'in_progress';
+  }
   progress.lastActivityAt = new Date();
   progress.markModified('tracksProgress');
   await progress.save();
@@ -252,9 +281,8 @@ async function startLesson(userId, lessonId) {
   };
 
   let moduleProgress =
-    trackProgress.modulesProgress.find(
-      (mp) => String(mp.moduleId) === String(module._id)
-    ) || findModuleProgressFor(module);
+    findModuleProgressByIdentifier(trackProgress, module) ||
+    findModuleProgressFor(module);
 
   console.log('[TRACK] startLesson: resolved moduleProgress', {
     moduleId: String(module._id),
@@ -275,12 +303,11 @@ async function startLesson(userId, lessonId) {
   }
 
   if (!moduleProgress) {
-    const previousModuleId =
-      moduleIndex > 0 ? String(modulesInTrack[moduleIndex - 1]._id) : null;
-    const previousModuleProgress = previousModuleId
-      ? trackProgress.modulesProgress.find(
-          (mp) => String(mp.moduleId) === previousModuleId
-        )
+    const previousModuleDoc =
+      moduleIndex > 0 ? modulesInTrack[moduleIndex - 1] : null;
+    const previousModuleProgress = previousModuleDoc
+      ? findModuleProgressByIdentifier(trackProgress, previousModuleDoc) ||
+        findModuleProgressFor(previousModuleDoc)
       : null;
     const canUnlock =
       moduleIndex === 0 ||
@@ -341,11 +368,11 @@ async function startLesson(userId, lessonId) {
               ? { id: String(moduleDoc._id), code: moduleDoc.moduleId }
               : null,
           });
-          const prereqModuleProgress = moduleDoc
-            ? findModuleProgressFor(moduleDoc)
-            : trackProgress.modulesProgress.find(
-                (mp) => String(mp.moduleId) === String(prereqId)
-              );
+          const prereqModuleProgress =
+            (moduleDoc &&
+              (findModuleProgressByIdentifier(trackProgress, moduleDoc) ||
+                findModuleProgressFor(moduleDoc))) ||
+            findModuleProgressByIdentifier(trackProgress, prereqId);
           console.log('[TRACK] startLesson: module prerequisite progress', {
             prereqId,
             status: prereqModuleProgress?.status,
@@ -362,9 +389,9 @@ async function startLesson(userId, lessonId) {
         for (const variant of variants) {
           const prereqModuleDoc = moduleAliasMap.get(variant);
           if (prereqModuleDoc) {
-            const prereqModuleProgress = findModuleProgressFor(
-              prereqModuleDoc
-            );
+            const prereqModuleProgress =
+              findModuleProgressByIdentifier(trackProgress, prereqModuleDoc) ||
+              findModuleProgressFor(prereqModuleDoc);
             console.log('[TRACK] startLesson: module code prerequisite check', {
               prereqId,
               variant,
@@ -442,9 +469,32 @@ async function startLesson(userId, lessonId) {
     lessonProgress.status = 'in_progress';
   }
 
+  if (moduleProgress.status === 'completed' && trackProgress.status !== 'completed') {
+    try {
+      const allDone = await areAllTrackModulesCompleted(
+        trackProgress,
+        trackDoc,
+        module.trackId
+      );
+      if (allDone) {
+        trackProgress.status = 'completed';
+        trackProgress.completedAt = trackProgress.completedAt || new Date();
+      }
+    } catch (err) {
+      console.warn('[TRACK] startLesson: failed to auto-complete track', {
+        trackId: module.trackId,
+        error: err?.message || err,
+      });
+    }
+  }
+
   progress.currentLesson = lesson._id;
-  moduleProgress.status = 'in_progress';
-  trackProgress.status = 'in_progress';
+  if (moduleProgress.status !== 'completed') {
+    moduleProgress.status = 'in_progress';
+  }
+  if (trackProgress.status !== 'completed') {
+    trackProgress.status = 'in_progress';
+  }
   progress.lastActivityAt = new Date();
   progress.markModified('tracksProgress');
   await progress.save();
