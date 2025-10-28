@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Container, Row, Col, Card, Button, Form, Alert, Badge } from 'react-bootstrap';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { FaCheck, FaTimes, FaFlag, FaClock } from 'react-icons/fa';
 import QuizzesAPI from '../services/quizzes.api';
 import LessonProgressAPI from '../services/lessonProgress.service';
@@ -9,9 +9,14 @@ import LearningAPI from '../services/learning.api';
 const QuizInterface = () => {
   const { quizId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const lessonId = searchParams.get('lessonId');
   const contentId = searchParams.get('contentId');
+  const locationState = location.state || {};
+  const [moduleInfo, setModuleInfo] = useState(null);
+  const [relatedTrackId, setRelatedTrackId] = useState(locationState.trackId || null);
+  const [moduleIdOverride] = useState(locationState.moduleId || null);
   const [quiz, setQuiz] = useState(null);
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState({});
@@ -33,6 +38,22 @@ const QuizInterface = () => {
         const data = await QuizzesAPI.getQuizById(quizId);
         if (!mounted) return;
         setQuiz(data.quiz);
+        const moduleIdentifierRaw = moduleIdOverride || data.quiz?.moduleId;
+        const moduleIdentifier =
+          typeof moduleIdentifierRaw === 'object'
+            ? moduleIdentifierRaw?._id || moduleIdentifierRaw?.moduleId
+            : moduleIdentifierRaw;
+        if (moduleIdentifier && !relatedTrackId) {
+          try {
+            const moduleData = await LearningAPI.getModuleById(moduleIdentifier);
+            setModuleInfo(moduleData.module);
+            if (moduleData.module?.trackId) {
+              setRelatedTrackId(moduleData.module.trackId);
+            }
+          } catch (moduleErr) {
+            console.warn('Unable to load module info for quiz context', moduleErr);
+          }
+        }
       } catch (err) {
         setError('Failed to load quiz');
         console.error(err);
@@ -293,6 +314,20 @@ const QuizInterface = () => {
   };
 
   const renderResults = () => {
+    const courseTrackId =
+      relatedTrackId ||
+      moduleInfo?.trackId ||
+      quiz?.trackId ||
+      quiz?.module?.trackId ||
+      null;
+    const handleReturnToCourse = () => {
+      if (courseTrackId) {
+        navigate(`/course/${courseTrackId}`, { replace: true });
+      } else {
+        navigate(-1);
+      }
+    };
+
     return (
       <div className="lms-results-box">
         <div className={`lms-score-badge ${results.passed ? 'lms-passed' : 'lms-failed'}`}>
@@ -398,8 +433,8 @@ const QuizInterface = () => {
         </div>
 
         <div className="mt-4">
-          <Button variant="primary" onClick={() => navigate(-1)} className="me-2">
-            Back to Module
+          <Button variant="primary" onClick={handleReturnToCourse} className="me-2">
+            Back to Course
           </Button>
           {results.attemptsRemaining > 0 && !results.passed && (
             <Button variant="outline-primary" onClick={() => window.location.reload()}>

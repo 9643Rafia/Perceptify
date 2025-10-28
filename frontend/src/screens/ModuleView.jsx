@@ -136,13 +136,23 @@ const ModuleView = () => {
 
   const handleQuizClick = () => {
     if (module.quizId) {
-      navigate(`/quiz/${module.quizId}`);
+      navigate(`/quiz/${module.quizId}`, {
+        state: {
+          trackId: module.trackId,
+          moduleId: module._id,
+        },
+      });
     }
   };
 
   const handleLabClick = () => {
     if (lab?.labId) {
-      navigate(`/lab/${lab.labId}`);
+      navigate(`/lab/${lab.labId}`, {
+        state: {
+          trackId: module.trackId,
+          moduleId: module._id,
+        },
+      });
     }
   };
 
