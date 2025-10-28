@@ -1,5 +1,11 @@
 const Lesson = require('../models/lesson.model');
 const Module = require('../models/module.model');
+const {
+  prepareTrackMatchingContext,
+  findTrackProgressByIdentifier,
+  uniqueModuleTrackVariants,
+  createTrackVariants,
+} = require('../utils/track.utils');
 
 // Unlock next lesson
 async function unlockNextLesson(progress, module, currentLesson, moduleProgress) {
@@ -35,16 +41,24 @@ async function unlockNextModule(progress, module, moduleProgress) {
     moduleProgress.status = 'completed';
     moduleProgress.completedAt = new Date();
 
+    const trackContext = await prepareTrackMatchingContext(progress);
+    const trackMatch = findTrackProgressByIdentifier(trackContext, module.trackId);
+    const trackProgress = trackMatch.trackProgress;
+    const trackDoc = trackMatch.track;
+    if (!trackProgress) return null;
+
+    const moduleTrackVariants = new Set([
+      ...createTrackVariants(module.trackId),
+      ...(trackDoc ? uniqueModuleTrackVariants(trackDoc) : []),
+    ]);
+
     const nextModule = await Module.findOne({
-      trackId: module.trackId,
+      trackId: { $in: Array.from(moduleTrackVariants) },
       order: { $gt: module.order },
       status: 'active'
     }).sort({ order: 1 });
 
     if (nextModule) {
-      const trackProgress = progress.tracksProgress.find(tp => String(tp.trackId) === String(module.trackId));
-      if (!trackProgress) return null;
-
       let nextModuleProgress = trackProgress.modulesProgress.find(mp => String(mp.moduleId) === String(nextModule._id));
       if (!nextModuleProgress) {
         nextModuleProgress = {

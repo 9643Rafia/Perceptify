@@ -216,6 +216,14 @@ const CourseView = () => {
     return module.prerequisites.every(prereqId => {
       const prereqModule = findModuleByIdentifier(prereqId);
       if (!prereqModule) {
+        if (typeof prereqId === 'string' && prereqId.toLowerCase().includes('track')) {
+          console.log('📎 CourseView: treating track-level prerequisite as satisfied (backend enforces track completion)', {
+            moduleId: String(module._id),
+            moduleName: module.name,
+            prereqId
+          });
+          return true;
+        }
         console.warn('Prerequisite module not found in course data:', prereqId);
         return false;
       }

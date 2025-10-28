@@ -5,26 +5,14 @@ const Progress = require('../models/progress.model');
 const Module = require('../models/module.model');
 const Lesson = require('../models/lesson.model');
 const Track = require('../models/track.model');
+const {
+  prepareTrackMatchingContext,
+  findTrackProgressByIdentifier,
+  uniqueModuleTrackVariants,
+  createTrackVariants,
+  attachTrackProgressToContext,
+} = require('../utils/track.utils');
 
-// Resolve a module whether quiz.moduleId is an ObjectId or a string code
-async function findModuleFlexible(moduleRef) {
-  if (!moduleRef) return null;
-
-  // If it looks like an ObjectId, try by _id first
-  if (mongoose.Types.ObjectId.isValid(String(moduleRef))) {
-    const byId = await Module.findOne({ _id: moduleRef, status: 'active' });
-    if (byId) return byId;
-  }
-
-  // Otherwise try by moduleId (string code), then by slug (if you use it)
-  const byCode = await Module.findOne({ moduleId: String(moduleRef), status: 'active' });
-  if (byCode) return byCode;
-
-  const bySlug = await Module.findOne({ slug: String(moduleRef), status: 'active' });
-  if (bySlug) return bySlug;
-
-  return null;
-}
 // ---------- helpers ----------
 const isObjectId = (v) => mongoose.Types.ObjectId.isValid(String(v));
 
@@ -109,11 +97,14 @@ exports.getQuizById = async (req, res) => {
     if (req.user && quiz.moduleId) {
       const progress = await Progress.findOne({ userId: req.user._id });
       if (progress) {
+        const trackContext = await prepareTrackMatchingContext(progress);
         const module = await findModuleFlexible(quiz.moduleId);
         if (module) {
-          // match trackProgress by trackId safely
-          const trackProgress =
-            progress.tracksProgress?.find((tp) => eqId(tp.trackId, module.trackId)) || null;
+          const trackMatch = findTrackProgressByIdentifier(
+            trackContext,
+            module.trackId
+          );
+          const trackProgress = trackMatch.trackProgress || null;
 
           if (trackProgress) {
             const moduleProgress =
@@ -170,6 +161,8 @@ exports.submitQuiz = async (req, res) => {
     let trackProgress = null;
     let track = null;
 
+    let trackContext = null;
+
     if (isModuleQuiz) {
       // 🔎 robust module lookup (works for ObjectId or string codes)
       moduleDoc = await findModuleFlexible(quiz.moduleId);
@@ -178,16 +171,25 @@ exports.submitQuiz = async (req, res) => {
         return res.status(404).json({ message: 'Module not found' });
       }
 
+      trackContext = await prepareTrackMatchingContext(progress);
+
+      const trackMatch = findTrackProgressByIdentifier(
+        trackContext,
+        moduleDoc.trackId
+      );
+      trackProgress = trackMatch.trackProgress || null;
+
       // Get the track document for order comparison
-      track = await Track.findById(moduleDoc.trackId);
+      track =
+        trackMatch.track ||
+        (await Track.findOne({
+          $or: [{ _id: moduleDoc.trackId }, { trackId: moduleDoc.trackId }],
+          status: 'active',
+        }));
       if (!track) {
         return res.status(404).json({ message: 'Track not found' });
       }
 
-      // Find the parent track progress by matching trackId as string
-      trackProgress = (progress.tracksProgress || []).find(
-        (tp) => String(tp.trackId) === String(moduleDoc.trackId)
-      );
       if (!trackProgress) {
         return res.status(400).json({ message: 'You must start the track first' });
       }
@@ -296,9 +298,11 @@ exports.submitQuiz = async (req, res) => {
             }).sort({ order: 1 });
 
             if (nextTrack) {
-              let nextTrackProgress = progress.tracksProgress.find(
-                (tp) => String(tp.trackId) === String(nextTrack._id)
-              );
+              const nextTrackMatch = trackContext
+                ? findTrackProgressByIdentifier(trackContext, nextTrack._id)
+                : { trackProgress: null };
+
+              let nextTrackProgress = nextTrackMatch.trackProgress;
 
               if (!nextTrackProgress) {
                 nextTrackProgress = {
@@ -308,6 +312,13 @@ exports.submitQuiz = async (req, res) => {
                   startedAt: new Date()
                 };
                 progress.tracksProgress.push(nextTrackProgress);
+                if (trackContext) {
+                  attachTrackProgressToContext(
+                    trackContext,
+                    nextTrackProgress,
+                    nextTrack
+                  );
+                }
                 console.log('[QUIZ] submitQuiz: created progress for next track and unlocked:', String(nextTrack._id));
               } else if (nextTrackProgress.status === 'locked' || !nextTrackProgress.status) {
                 nextTrackProgress.status = 'unlocked';
@@ -318,45 +329,45 @@ exports.submitQuiz = async (req, res) => {
         }
 
         // 🔓 Unlock next module in same track by order
+        const moduleTrackVariantsForQuery = new Set([
+          ...createTrackVariants(moduleDoc.trackId),
+          ...(track ? uniqueModuleTrackVariants(track) : []),
+        ]);
+
         const nextModule = await Module.findOne({
-          trackId: moduleDoc.trackId,
+          trackId: { $in: Array.from(moduleTrackVariantsForQuery) },
           status: 'active',
           order: { $gt: moduleDoc.order },
         }).sort({ order: 1 });
 
-        if (nextModule) {
-          const trackProgress = (progress.tracksProgress || []).find(
-            (tp) => String(tp.trackId) === String(moduleDoc.trackId)
+        if (nextModule && trackProgress) {
+          if (!Array.isArray(trackProgress.modulesProgress)) trackProgress.modulesProgress = [];
+
+          let nextMp = trackProgress.modulesProgress.find(
+            (mp) => String(mp.moduleId) === String(nextModule._id)
           );
 
-          if (trackProgress) {
-            if (!Array.isArray(trackProgress.modulesProgress)) trackProgress.modulesProgress = [];
-
-            let nextMp = trackProgress.modulesProgress.find(
-              (mp) => String(mp.moduleId) === String(nextModule._id)
-            );
-
-            if (!nextMp) {
-              nextMp = {
-                moduleId: nextModule._id,
-                lessonsProgress: [],
-                quizAttempts: [],
-                labAttempts: [],
-                bestQuizScore: 0,
-                bestLabScore: 0,
-                status: 'unlocked', // 🔓 key part
-              };
-              trackProgress.modulesProgress.push(nextMp);
-              console.log('[QUIZ] submitQuiz: created progress for next module and unlocked:', String(nextModule._id));
-            } else if (nextMp.status === 'locked' || !nextMp.status) {
-              nextMp.status = 'unlocked';
-              console.log('[QUIZ] submitQuiz: unlocked existing next module progress:', String(nextModule._id));
-            } else {
-              console.log('[QUIZ] submitQuiz: next module already unlocked or completed:', String(nextModule._id));
-            }
-
-            nextModuleUnlockedId = String(nextModule._id);
+          if (!nextMp) {
+            nextMp = {
+              moduleId: nextModule._id,
+              lessonsProgress: [],
+              quizAttempts: [],
+              labAttempts: [],
+              bestQuizScore: 0,
+              bestLabScore: 0,
+              status: 'unlocked', // 🔓 key part
+            };
+            trackProgress.modulesProgress.push(nextMp);
+            console.log('[QUIZ] submitQuiz: created progress for next module and unlocked:', String(nextModule._id));
+          } else if (nextMp.status === 'locked' || !nextMp.status) {
+            nextMp.status = 'unlocked';
+            nextMp.startedAt = nextMp.startedAt || new Date();
+            console.log('[QUIZ] submitQuiz: unlocked existing next module progress:', String(nextModule._id));
+          } else {
+            console.log('[QUIZ] submitQuiz: next module already unlocked or completed:', String(nextModule._id));
           }
+
+          nextModuleUnlockedId = String(nextModule._id);
         } else {
           console.log('[QUIZ] submitQuiz: no next module to unlock (last module in track)');
         }
@@ -427,11 +438,15 @@ exports.getLabById = async (req, res) => {
     if (req.user && lab.moduleId) {
       const progress = await Progress.findOne({ userId: req.user._id });
       if (progress) {
+        const trackContext = await prepareTrackMatchingContext(progress);
         // lab.moduleId is usually an ObjectId
         const module = await Module.findOne({ _id: lab.moduleId });
         if (module) {
-          const trackProgress =
-            progress.tracksProgress?.find((tp) => eqId(tp.trackId, module.trackId)) || null;
+          const trackMatch = findTrackProgressByIdentifier(
+            trackContext,
+            module.trackId
+          );
+          const trackProgress = trackMatch.trackProgress || null;
           if (trackProgress) {
             const moduleProgress =
               trackProgress.modulesProgress?.find((mp) => eqId(mp.moduleId, module._id)) || null;
@@ -481,8 +496,12 @@ exports.submitLab = async (req, res) => {
       return res.status(404).json({ message: 'Module not found' });
     }
 
-    const trackProgress =
-      progress.tracksProgress?.find((tp) => eqId(tp.trackId, module.trackId)) || null;
+    const trackContext = await prepareTrackMatchingContext(progress);
+    const trackMatch = findTrackProgressByIdentifier(
+      trackContext,
+      module.trackId
+    );
+    const trackProgress = trackMatch.trackProgress || null;
     if (!trackProgress) {
       return res.status(400).json({ message: 'You must start the track first' });
     }

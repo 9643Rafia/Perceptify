@@ -2,6 +2,12 @@ const Progress = require('../models/progress.model');
 const Lesson = require('../models/lesson.model');
 const Module = require('../models/module.model');
 const { startTrack } = require('./track.service');
+const {
+  prepareTrackMatchingContext,
+  findTrackProgressByIdentifier,
+  uniqueModuleTrackVariants,
+  createTrackVariants,
+} = require('../utils/track.utils');
 
 // Ensures the entire lesson-progress hierarchy exists for user
 async function ensureLessonProgress(userId, lessonId) {
@@ -37,16 +43,39 @@ async function ensureLessonProgress(userId, lessonId) {
 
   if (!lesson) return { progress }; // if only fetching general progress
 
+  let trackContext = await prepareTrackMatchingContext(progress);
+
   // Track
-  let trackProgress = progress.tracksProgress.find(tp => String(tp.trackId) === String(module.trackId));
+  let { trackProgress, track: trackDoc } = findTrackProgressByIdentifier(
+    trackContext,
+    module.trackId
+  );
   if (!trackProgress) {
     const started = await startTrack(userId, module.trackId);
     progress = started.progress;
     trackProgress = started.trackProgress;
+    trackContext = await prepareTrackMatchingContext(progress);
+    const refreshed = findTrackProgressByIdentifier(
+      trackContext,
+      module.trackId
+    );
+    if (refreshed.trackProgress) {
+      trackProgress = refreshed.trackProgress;
+      trackDoc = refreshed.track || trackDoc;
+    }
   }
 
+  if (!trackProgress) throw new Error('Please start the track first');
+
   // Ensure we have an up-to-date module ordering for gating logic
-  const modulesInTrack = await Module.find({ trackId: module.trackId, status: 'active' }).sort({ order: 1 });
+  const moduleTrackVariants = new Set([
+    ...createTrackVariants(module.trackId),
+    ...(trackDoc ? uniqueModuleTrackVariants(trackDoc) : []),
+  ]);
+  const modulesInTrack = await Module.find({
+    status: 'active',
+    trackId: { $in: Array.from(moduleTrackVariants) },
+  }).sort({ order: 1 });
   const moduleIndexRaw = modulesInTrack.findIndex(mod => String(mod._id) === String(module._id));
   const moduleIndex = moduleIndexRaw === -1 ? 0 : moduleIndexRaw;
 
