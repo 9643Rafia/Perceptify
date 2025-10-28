@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Card, Button, Badge, Alert, ListGroup } from 'react-bootstrap';
 import { useParams, useNavigate } from 'react-router-dom';
-import { FaLock, FaCheck, FaClock, FaPlay, FaClipboardCheck } from 'react-icons/fa';
+import { FaLock, FaCheck, FaClock, FaPlay, FaClipboardCheck, FaFlask } from 'react-icons/fa';
 import LearningAPI from '../services/learning.api';
 import LessonProgressAPI from '../services/lessonProgress.service';
 
@@ -11,6 +11,7 @@ const ModuleView = () => {
   const [module, setModule] = useState(null);
   const [lessons, setLessons] = useState([]);
   const [moduleProgress, setModuleProgress] = useState(null);
+  const [lab, setLab] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -29,6 +30,7 @@ const ModuleView = () => {
         setModule(data.module);
         setLessons(data.lessons);
         setModuleProgress(data.progress);
+        setLab(data.lab || null);
         try {
           const stored = JSON.parse(localStorage.getItem('progress') || '{}');
           if (stored?.tracksProgress?.length) {
@@ -138,6 +140,12 @@ const ModuleView = () => {
     }
   };
 
+  const handleLabClick = () => {
+    if (lab?.labId) {
+      navigate(`/lab/${lab.labId}`);
+    }
+  };
+
   const allLessonsCompleted = () => {
     if (!moduleProgress || !moduleProgress.lessonsProgress) return false;
     return lessons.every(lesson => {
@@ -145,6 +153,15 @@ const ModuleView = () => {
       return progress && progress.status === 'completed';
     });
   };
+
+  const labAttempts = moduleProgress?.labAttempts || [];
+  const latestLabAttempt = labAttempts.length ? labAttempts[labAttempts.length - 1] : null;
+  const labCompleted = !!(latestLabAttempt && latestLabAttempt.passed);
+  const labUnlocked =
+    !lab ||
+    !module.requiresLabCompletion ||
+    allLessonsCompleted() ||
+    labCompleted;
 
   const formatDuration = (duration, type) => {
     if (type === 'minutes') {
@@ -317,6 +334,57 @@ const ModuleView = () => {
                 </Card.Body>
               </Card>
             )}
+
+            {lab && (
+              <Card className="mt-4 lms-content-box">
+                <Card.Body>
+                  <Row className="align-items-center">
+                    <Col md={8}>
+                      <h5 className="mb-2">
+                        <FaFlask className="me-2" />
+                        Hands-on Lab
+                      </h5>
+                      <p className="text-muted mb-1">{lab.description}</p>
+                      <small className="text-muted d-block">
+                        Passing Score: {lab.passingScore}% • Attempts allowed: {lab.attempts === -1 ? 'Unlimited' : lab.attempts}
+                      </small>
+                      {labCompleted ? (
+                        <Badge bg="success" className="mt-2">
+                          Lab completed (best score: {latestLabAttempt.score}%)
+                        </Badge>
+                      ) : module.requiresLabCompletion ? (
+                        <Badge bg="info" className="mt-2">
+                          Required to complete this module
+                        </Badge>
+                      ) : null}
+                    </Col>
+                    <Col md={4} className="text-end">
+                      <Button
+                        variant={labCompleted ? 'success' : 'primary'}
+                        disabled={!labUnlocked}
+                        onClick={handleLabClick}
+                      >
+                        {labCompleted
+                          ? 'View Lab'
+                          : labUnlocked
+                          ? 'Start Lab'
+                          : 'Complete Lessons'}
+                      </Button>
+                      {!labUnlocked && (
+                        <small className="d-block text-muted mt-2">
+                          Finish lessons to unlock
+                        </small>
+                      )}
+                      {labAttempts.length > 0 && !labCompleted && (
+                        <small className="d-block text-muted mt-2">
+                          Attempts used: {labAttempts.length}
+                        </small>
+                      )}
+                    </Col>
+                  </Row>
+                </Card.Body>
+              </Card>
+            )}
           </Col>
 
           <Col lg={4}>
@@ -356,11 +424,23 @@ const ModuleView = () => {
                 {module.requiresLabCompletion && (
                   <>
                     <hr />
-                    <div>
-                      <Badge bg="info" className="w-100">
-                        Hands-on Lab Required
-                      </Badge>
+                    <div className="mb-2">
+                      <strong className="d-block">Hands-on Lab</strong>
+                      {labCompleted ? (
+                        <Badge bg="success">Lab completed</Badge>
+                      ) : (
+                        <Badge bg="info">Lab required</Badge>
+                      )}
                     </div>
+                    {lab && (
+                      <div className="small text-muted">
+                        <div>Attempts used: {labAttempts.length}</div>
+                        {labAttempts.length > 0 && (
+                          <div>Best score: {Math.max(...labAttempts.map(a => a.score || 0))}%</div>
+                        )}
+                        {!labCompleted && <div>Passing score: {lab.passingScore}%</div>}
+                      </div>
+                    )}
                   </>
                 )}
               </Card.Body>

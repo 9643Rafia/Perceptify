@@ -4,6 +4,7 @@ const Lesson = require('../models/lesson.model');
 const Content = require('../models/content.model');
 const Quiz = require('../models/quiz.model');
 const Progress = require('../models/progress.model');
+const Lab = require('../models/lab.model');
 
 // ========== TRACK CONTROLLERS ==========
 
@@ -167,12 +168,32 @@ exports.getModuleById = async (req, res) => {
       }
     }
 
+    const lab = await Lab.findOne({
+      status: 'active',
+      $or: [
+        { moduleId: String(module._id) },
+        { moduleId: module.moduleId },
+      ],
+    }).lean();
+
+    const labSummary = lab
+      ? {
+          labId: lab.labId,
+          title: lab.title,
+          description: lab.description,
+          labType: lab.labType,
+          passingScore: lab.passingScore,
+          attempts: lab.attempts,
+        }
+      : null;
+
     console.log('🎯 Final moduleProgress (after robust string match):', moduleProgress);
 
     res.status(200).json({
       module,
       lessons,
-      progress: moduleProgress
+      progress: moduleProgress,
+      lab: labSummary
     });
   } catch (error) {
     console.error('❌ Error fetching module:', error);
