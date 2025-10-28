@@ -207,7 +207,7 @@
       "description": "Apply your knowledge in a comprehensive capstone project demonstrating mastery",
       "order": 4,
       "estimatedDuration": "4 weeks",
-      "lessonCount": 0,
+      "lessonCount": 1,
       "status": "active",
       "prerequisites": ["module_3.3"],
       "learningObjectives": [
@@ -218,6 +218,7 @@
       ],
       "quizId": null,
       "passingScore": 80,
+      "requiresLabCompletion": true,
       "requiresCapstone": true,
       "createdAt": "2025-01-15T00:00:00Z",
       "updatedAt": "2025-01-15T00:00:00Z"

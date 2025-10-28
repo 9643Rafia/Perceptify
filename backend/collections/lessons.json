@@ -682,6 +682,30 @@
       "prerequisites": ["lesson_3.3.2"],
       "createdAt": "2025-01-15T00:00:00Z",
       "updatedAt": "2025-01-15T00:00:00Z"
+    },
+    {
+      "_id": "lesson_3.4.1",
+      "lessonId": "LES-3.4.1",
+      "moduleId": "module_3.4",
+      "name": "Capstone Kickoff Workshop",
+      "description": "Define your capstone scope, assemble verification tools, and draft milestone plans.",
+      "order": 1,
+      "estimatedDuration": 35,
+      "durationType": "minutes",
+      "status": "active",
+      "contentItems": [
+        "content_3.4.1_briefing",
+        "content_3.4.1_planner",
+        "content_3.4.1_lab"
+      ],
+      "learningOutcomes": [
+        "Articulate the objective and scope of your capstone investigation",
+        "Assemble the analytical toolkit and evidence collection workflow",
+        "Schedule milestones and success criteria for the project delivery"
+      ],
+      "prerequisites": ["lesson_3.3.3"],
+      "createdAt": "2025-01-15T00:00:00Z",
+      "updatedAt": "2025-01-15T00:00:00Z"
     }
   ]
 }
