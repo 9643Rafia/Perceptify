@@ -1,6 +1,7 @@
 const Progress = require('../models/progress.model');
 const Lesson = require('../models/lesson.model');
 const Module = require('../models/module.model');
+const { startTrack } = require('./track.service');
 
 // Ensures the entire lesson-progress hierarchy exists for user
 async function ensureLessonProgress(userId, lessonId) {
@@ -39,22 +40,40 @@ async function ensureLessonProgress(userId, lessonId) {
   // Track
   let trackProgress = progress.tracksProgress.find(tp => String(tp.trackId) === String(module.trackId));
   if (!trackProgress) {
-    trackProgress = { trackId: module.trackId, status: 'unlocked', modulesProgress: [], startedAt: new Date() };
-    progress.tracksProgress.push(trackProgress);
+    const started = await startTrack(userId, module.trackId);
+    progress = started.progress;
+    trackProgress = started.trackProgress;
   }
+
+  // Ensure we have an up-to-date module ordering for gating logic
+  const modulesInTrack = await Module.find({ trackId: module.trackId, status: 'active' }).sort({ order: 1 });
+  const moduleIndexRaw = modulesInTrack.findIndex(mod => String(mod._id) === String(module._id));
+  const moduleIndex = moduleIndexRaw === -1 ? 0 : moduleIndexRaw;
 
   // Module
   let moduleProgress = trackProgress.modulesProgress.find(mp => String(mp.moduleId) === String(module._id));
   if (!moduleProgress) {
+    const previousModuleId = moduleIndex > 0 ? String(modulesInTrack[moduleIndex - 1]._id) : null;
+    const previousModuleProgress = previousModuleId
+      ? trackProgress.modulesProgress.find(mp => String(mp.moduleId) === previousModuleId)
+      : null;
+    const canUnlock = moduleIndex === 0 || (previousModuleProgress && previousModuleProgress.status === 'completed');
+
     moduleProgress = {
       moduleId: module._id,
-      status: 'unlocked',
+      status: canUnlock ? 'unlocked' : 'locked',
       lessonsProgress: [],
       quizAttempts: [],
-      labAttempts: [],
-      startedAt: new Date()
+      labAttempts: []
     };
+    if (canUnlock) {
+      moduleProgress.startedAt = new Date();
+    }
     trackProgress.modulesProgress.push(moduleProgress);
+  }
+
+  if (moduleProgress.status === 'locked') {
+    throw new Error('Module is locked');
   }
 
   // Lesson

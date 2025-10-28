@@ -167,6 +167,8 @@ exports.submitQuiz = async (req, res) => {
     const isModuleQuiz = !!quiz.moduleId;
     let moduleProgress = null;
     let moduleDoc = null;
+    let trackProgress = null;
+    let track = null;
 
     if (isModuleQuiz) {
       // 🔎 robust module lookup (works for ObjectId or string codes)
@@ -177,13 +179,13 @@ exports.submitQuiz = async (req, res) => {
       }
 
       // Get the track document for order comparison
-      const track = await Track.findById(moduleDoc.trackId);
+      track = await Track.findById(moduleDoc.trackId);
       if (!track) {
         return res.status(404).json({ message: 'Track not found' });
       }
 
       // Find the parent track progress by matching trackId as string
-      const trackProgress = (progress.tracksProgress || []).find(
+      trackProgress = (progress.tracksProgress || []).find(
         (tp) => String(tp.trackId) === String(moduleDoc.trackId)
       );
       if (!trackProgress) {

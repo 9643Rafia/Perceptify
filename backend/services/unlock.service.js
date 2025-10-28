@@ -43,15 +43,25 @@ async function unlockNextModule(progress, module, moduleProgress) {
 
     if (nextModule) {
       const trackProgress = progress.tracksProgress.find(tp => String(tp.trackId) === String(module.trackId));
-      const exists = trackProgress.modulesProgress.some(mp => String(mp.moduleId) === String(nextModule._id));
-      if (!exists) {
-        trackProgress.modulesProgress.push({
+      if (!trackProgress) return null;
+
+      let nextModuleProgress = trackProgress.modulesProgress.find(mp => String(mp.moduleId) === String(nextModule._id));
+      if (!nextModuleProgress) {
+        nextModuleProgress = {
           moduleId: nextModule._id,
           status: 'unlocked',
           lessonsProgress: [],
           quizAttempts: [],
-          labAttempts: []
-        });
+          labAttempts: [],
+          startedAt: new Date()
+        };
+        trackProgress.modulesProgress.push(nextModuleProgress);
+        return nextModule;
+      }
+
+      if (nextModuleProgress.status === 'locked' || !nextModuleProgress.status) {
+        nextModuleProgress.status = 'unlocked';
+        nextModuleProgress.startedAt = nextModuleProgress.startedAt || new Date();
         return nextModule;
       }
     }

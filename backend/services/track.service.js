@@ -33,19 +33,26 @@ async function startTrack(userId, trackId) {
 
   // Unlock modules
   const allModules = await Module.find({ trackId: track._id, status: 'active' }).sort({ order: 1 });
-  for (const mod of allModules) {
-    const exists = trackProgress.modulesProgress.some(mp => String(mp.moduleId) === String(mod._id));
-    if (!exists) {
-      trackProgress.modulesProgress.push({
+  allModules.forEach((mod, index) => {
+    let moduleProgress = trackProgress.modulesProgress.find(mp => String(mp.moduleId) === String(mod._id));
+    if (!moduleProgress) {
+      moduleProgress = {
         moduleId: mod._id,
-        status: 'unlocked',
+        status: index === 0 ? 'unlocked' : 'locked',
         lessonsProgress: [],
         quizAttempts: [],
-        labAttempts: [],
-        startedAt: new Date()
-      });
+        labAttempts: []
+      };
+      if (index === 0) {
+        moduleProgress.startedAt = new Date();
+      }
+      trackProgress.modulesProgress.push(moduleProgress);
+    } else if (index === 0 && moduleProgress.status === 'locked') {
+      // Ensure the very first module is available to begin
+      moduleProgress.status = 'unlocked';
+      moduleProgress.startedAt = moduleProgress.startedAt || new Date();
     }
-  }
+  });
 
   progress.currentTrack = track._id;
   progress.currentModule = allModules.length ? allModules[0]._id : null;
@@ -70,18 +77,36 @@ async function startLesson(userId, lessonId) {
   const trackProgress = progress.tracksProgress.find(tp => String(tp.trackId) === String(module.trackId));
   if (!trackProgress) throw new Error('Please start the track first');
 
+  const modulesInTrack = await Module.find({ trackId: module.trackId, status: 'active' }).sort({ order: 1 });
+  const moduleIndexRaw = modulesInTrack.findIndex(mod => String(mod._id) === String(module._id));
+  const moduleIndex = moduleIndexRaw === -1 ? 0 : moduleIndexRaw;
+
   let moduleProgress = trackProgress.modulesProgress.find(mp => String(mp.moduleId) === String(module._id));
   if (!moduleProgress) {
+    const previousModuleId = moduleIndex > 0 ? String(modulesInTrack[moduleIndex - 1]._id) : null;
+    const previousModuleProgress = previousModuleId
+      ? trackProgress.modulesProgress.find(mp => String(mp.moduleId) === previousModuleId)
+      : null;
+    const canUnlock = moduleIndex === 0 || (previousModuleProgress && previousModuleProgress.status === 'completed');
+
     moduleProgress = {
       moduleId: module._id,
-      status: 'unlocked',
+      status: canUnlock ? 'unlocked' : 'locked',
       lessonsProgress: [],
       quizAttempts: [],
-      labAttempts: [],
-      startedAt: new Date()
+      labAttempts: []
     };
+    if (canUnlock) {
+      moduleProgress.startedAt = new Date();
+    }
     trackProgress.modulesProgress.push(moduleProgress);
   }
+
+  if (moduleProgress.status === 'locked') {
+    throw new Error('Module is locked');
+  }
+
+  moduleProgress.startedAt = moduleProgress.startedAt || new Date();
 
   let lessonProgress = moduleProgress.lessonsProgress.find(lp => String(lp.lessonId) === String(lesson._id));
   if (!lessonProgress) {
