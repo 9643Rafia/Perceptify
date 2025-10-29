@@ -372,7 +372,7 @@
         "scoring": {
           "pointsPerCorrect": 10,
           "passingScore": 70,
-          "attemptsAllowed": 3
+          "attemptsAllowed": 30
         },
         "feedback": "immediate"
       },
@@ -9685,6 +9685,133 @@
       "quizId": "quiz_3.1.1",
       "questionCount": 12,
       "passingScore": 80,
+      "isRequired": true,
+      "status": "active",
+      "createdAt": "2025-01-15T00:00:00Z",
+      "updatedAt": "2025-01-15T00:00:00Z"
+    },
+    {
+      "_id": "content_3.4.1_briefing",
+      "contentId": "CNT-3.4.1-V1",
+      "lessonId": "lesson_3.4.1",
+      "type": "video",
+      "title": "Capstone Briefing & Success Criteria",
+      "description": "Kickoff briefing that walks through expectations, deliverables, and expert tips for the capstone.",
+      "order": 1,
+      "duration": 12,
+      "durationType": "minutes",
+      "url": "http://localhost:5000/media/videos/capstone-briefing.mp4",
+      "metadata": {
+        "resolution": "1080p",
+        "format": "mp4",
+        "speakers": [
+          "Lead Investigator",
+          "Capstone Mentor"
+        ],
+        "chapters": [
+          {
+            "title": "Project Overview",
+            "timestamp": "00:00"
+          },
+          {
+            "title": "Evidence Expectations",
+            "timestamp": "04:10"
+          },
+          {
+            "title": "Milestones & Reviews",
+            "timestamp": "08:45"
+          }
+        ]
+      },
+      "isRequired": true,
+      "status": "active",
+      "createdAt": "2025-01-15T00:00:00Z",
+      "updatedAt": "2025-01-15T00:00:00Z"
+    },
+    {
+      "_id": "content_3.4.1_planner",
+      "contentId": "CNT-3.4.1-R1",
+      "lessonId": "lesson_3.4.1",
+      "type": "reading",
+      "title": "Capstone Plan Builder",
+      "description": "Interactive planning worksheet to scope the target asset, verification workflow, and reporting template.",
+      "order": 2,
+      "duration": 18,
+      "durationType": "minutes",
+      "metadata": {
+        "format": "worksheet",
+        "sections": [
+          {
+            "title": "Define the Investigation",
+            "prompts": [
+              "What manipulation or threat vector are you targeting?",
+              "Who is the intended audience for your findings?",
+              "What does success look like for this project?"
+            ]
+          },
+          {
+            "title": "Tooling & Evidence Collection",
+            "prompts": [
+              "List the analysis tools you will employ and why.",
+              "Identify primary and secondary evidence sources.",
+              "Describe how you will document authenticity checks."
+            ]
+          },
+          {
+            "title": "Milestones & Risk Mitigation",
+            "prompts": [
+              "Break down the investigation into at least three milestones.",
+              "Note the potential blockers and contingency plans.",
+              "Specify review points with mentors or peers."
+            ]
+          }
+        ],
+        "download": {
+          "format": "pdf",
+          "url": "http://localhost:5000/media/docs/capstone-plan-template.pdf"
+        }
+      },
+      "isRequired": true,
+      "status": "active",
+      "createdAt": "2025-01-15T00:00:00Z",
+      "updatedAt": "2025-01-15T00:00:00Z"
+    },
+    {
+      "_id": "content_3.4.1_lab",
+      "contentId": "CNT-3.4.1-LAB",
+      "lessonId": "lesson_3.4.1",
+      "type": "lab",
+      "subType": "hands-on-lab",
+      "title": "Capstone Verification Lab",
+      "description": "Complete a guided lab to validate your workflow on a sample deepfake scenario before tackling the full capstone.",
+      "order": 3,
+      "duration": 45,
+      "durationType": "minutes",
+      "url": "/labs/capstone-verification",
+      "metadata": {
+        "labId": "lab_MOD-3.4",
+        "labType": "multi_modal",
+        "objectives": [
+          "Run through the end-to-end verification process",
+          "Capture evidence using your chosen toolkit",
+          "Submit a short findings brief for mentor review"
+        ],
+        "expectedArtifacts": [
+          "Annotated media captures",
+          "Tool output logs",
+          "Preliminary assessment summary (200 words)"
+        ],
+        "supportingResources": [
+          {
+            "title": "Capstone Evidence Log Template",
+            "url": "http://localhost:5000/media/docs/capstone-evidence-log.xlsx"
+          },
+          {
+            "title": "Verification Checklist",
+            "url": "http://localhost:5000/media/docs/verification-checklist.pdf"
+          }
+        ]
+      },
       "isRequired": true,
       "status": "active",
       "createdAt": "2025-01-15T00:00:00Z",

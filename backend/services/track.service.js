@@ -1,0 +1,598 @@
+const Progress = require('../models/progress.model');
+const Track = require('../models/track.model');
+const Module = require('../models/module.model');
+const Lesson = require('../models/lesson.model');
+const {
+  prepareTrackMatchingContext,
+  findTrackProgressByIdentifier,
+  ensureTrackProgressEntry,
+  createTrackVariants,
+  buildTrackAliases,
+  uniqueModuleTrackVariants,
+  areAllTrackModulesCompleted,
+  findModuleProgressByIdentifier,
+} = require('../utils/track.utils');
+
+async function startTrack(userId, trackId) {
+  const track = await Track.findOne({
+    status: 'active',
+    $or: [{ _id: trackId }, { trackId }],
+  });
+  if (!track) throw new Error('Track not found');
+
+  let progress = await Progress.findOne({ userId });
+  if (!progress) progress = await Progress.create({ userId });
+
+  const trackContext = await prepareTrackMatchingContext(progress);
+
+  // Check prerequisites
+  if (track.prerequisites?.length > 0) {
+    let prerequisitesCompleted = true;
+    for (const prereqId of track.prerequisites) {
+      const match = findTrackProgressByIdentifier(trackContext, prereqId);
+      const prereqProgress = match.trackProgress;
+      const prereqTrackDoc = match.track;
+
+      let satisfied =
+        prereqProgress && prereqProgress.status === 'completed';
+
+      if (!satisfied && prereqProgress) {
+        try {
+          const allModulesDone = await areAllTrackModulesCompleted(
+            prereqProgress,
+            prereqTrackDoc,
+            prereqId
+          );
+          if (allModulesDone) {
+            prereqProgress.status = 'completed';
+            prereqProgress.completedAt = prereqProgress.completedAt || new Date();
+            satisfied = true;
+          }
+        } catch (err) {
+          console.warn('[TRACK] startTrack: failed to evaluate prerequisite modules', {
+            prereqId,
+            error: err?.message || err,
+          });
+        }
+      }
+
+      if (!satisfied) {
+        console.log('[TRACK] startTrack: prerequisite not met', {
+          userId: String(userId),
+          targetTrack: String(track._id),
+          prereqId,
+          found: !!prereqProgress,
+          status: prereqProgress?.status,
+        });
+        prerequisitesCompleted = false;
+        break;
+      }
+    }
+
+    if (!prerequisitesCompleted) throw new Error('Prerequisites not completed');
+  }
+
+  // Get or create trackProgress
+  const { trackProgress } = ensureTrackProgressEntry(
+    progress,
+    trackContext,
+    track._id,
+    {
+      status: 'unlocked',
+      modulesProgress: [],
+      startedAt: new Date(),
+    }
+  );
+
+  // Unlock modules
+  const moduleTrackIds = new Set([
+    ...uniqueModuleTrackVariants(track),
+    ...createTrackVariants(trackId),
+  ]);
+  const allModules = await Module.find({
+    status: 'active',
+    trackId: { $in: Array.from(moduleTrackIds) },
+  }).sort({ order: 1 });
+  allModules.forEach((mod, index) => {
+    let moduleProgress = findModuleProgressByIdentifier(trackProgress, mod);
+    if (!moduleProgress) {
+      moduleProgress = {
+        moduleId: mod._id,
+        status: index === 0 ? 'unlocked' : 'locked',
+        lessonsProgress: [],
+        quizAttempts: [],
+        labAttempts: []
+      };
+      if (index === 0) {
+        moduleProgress.startedAt = new Date();
+      }
+      trackProgress.modulesProgress.push(moduleProgress);
+    } else if (index === 0 && moduleProgress.status === 'locked') {
+      // Ensure the very first module is available to begin
+      moduleProgress.status = 'unlocked';
+      moduleProgress.startedAt = moduleProgress.startedAt || new Date();
+    }
+  });
+
+  progress.currentTrack = track._id;
+  progress.currentModule = allModules.length ? allModules[0]._id : null;
+  if (trackProgress.status !== 'completed') {
+    trackProgress.status = 'in_progress';
+  }
+  progress.lastActivityAt = new Date();
+  progress.markModified('tracksProgress');
+  await progress.save();
+
+  return { progress, trackProgress, allModules };
+}
+
+async function startLesson(userId, lessonId) {
+  const lesson = await Lesson.findOne({ _id: lessonId, status: 'active' });
+  if (!lesson) throw new Error('Lesson not found');
+
+  const module = await Module.findById(lesson.moduleId);
+  if (!module) throw new Error('Module not found');
+
+  const progress = await Progress.findOne({ userId });
+  if (!progress) throw new Error('Please start the track first');
+
+  const trackContext = await prepareTrackMatchingContext(progress);
+
+  let { trackProgress, track: trackDoc } = findTrackProgressByIdentifier(
+    trackContext,
+    module.trackId
+  );
+
+  if (!trackProgress) {
+    const fallbackMatch = findTrackProgressByIdentifier(
+      trackContext,
+      module.trackId?.toString?.() || module.trackId
+    );
+    trackProgress = fallbackMatch.trackProgress;
+    trackDoc = fallbackMatch.track || trackDoc;
+  }
+
+  if (!trackProgress) throw new Error('Please start the track first');
+
+  if (!trackDoc) {
+    trackDoc =
+      (module.trackId &&
+        (await Track.findOne({
+          status: 'active',
+          $or: [{ _id: module.trackId }, { trackId: module.trackId }],
+        }).lean())) ||
+      null;
+    if (trackDoc) {
+      buildTrackAliases(trackDoc).forEach((alias) => {
+        if (!trackContext.aliasMap.has(alias)) {
+          trackContext.aliasMap.set(alias, trackDoc);
+        }
+      });
+    }
+  }
+
+  console.log('[TRACK] startLesson: incoming request', {
+    userId: String(userId),
+    lessonId: String(lessonId),
+    moduleId: String(module._id),
+    moduleCode: module.moduleId,
+    trackId: String(module.trackId),
+    lessonPrereqs: lesson.prerequisites || [],
+  });
+
+  console.log('[TRACK] startLesson: existing module progresses', {
+    trackId: String(trackProgress.trackId),
+    modulesProgress: (trackProgress.modulesProgress || []).map((mp) => ({
+      moduleId: String(mp.moduleId),
+      status: mp.status,
+      lessonsProgressCount: mp.lessonsProgress?.length || 0,
+    })),
+  });
+
+  const moduleTrackVariants = new Set([
+    ...(trackDoc ? uniqueModuleTrackVariants(trackDoc) : []),
+    ...createTrackVariants(module.trackId),
+  ]);
+
+  const modulesInTrack = await Module.find({
+    status: 'active',
+    trackId: { $in: Array.from(moduleTrackVariants) },
+  }).sort({ order: 1 });
+
+  const moduleIndexRaw = modulesInTrack.findIndex(
+    (mod) => String(mod._id) === String(module._id)
+  );
+  const moduleIndex = moduleIndexRaw === -1 ? 0 : moduleIndexRaw;
+
+  const buildModuleAliases = (modDoc) => {
+    const aliases = new Set();
+    if (!modDoc) return aliases;
+
+    const rawId = String(modDoc._id || '').trim();
+    if (rawId) {
+      aliases.add(rawId);
+      aliases.add(rawId.toLowerCase());
+    }
+
+    const moduleCode = String(modDoc.moduleId || '').trim();
+    if (moduleCode) {
+      const lower = moduleCode.toLowerCase();
+      aliases.add(moduleCode);
+      aliases.add(lower);
+      aliases.add(lower.replace(/^mod[-_]?/, 'module_'));
+      aliases.add(moduleCode.replace(/^MOD[-_]?/i, 'module_'));
+      aliases.add(lower.replace(/^module[-_]?/, 'module_'));
+      aliases.add(lower.replace(/[^a-z0-9]/g, ''));
+      aliases.add(moduleCode.replace(/[^a-zA-Z0-9]/g, ''));
+    }
+
+    return aliases;
+  };
+
+  const createLookupVariants = (value) => {
+    if (value === undefined || value === null) return [];
+    const raw = String(value).trim();
+    if (!raw) return [];
+    const lower = raw.toLowerCase();
+    return Array.from(
+      new Set([
+        raw,
+        lower,
+        raw.replace(/^MOD[-_]?/i, 'module_'),
+        lower.replace(/^mod[-_]?/, 'module_'),
+        raw.replace(/^MODULE[-_]?/i, 'module_'),
+        lower.replace(/^module[-_]?/, 'module_'),
+        raw.replace(/^LES[-_]?/i, 'lesson_'),
+        lower.replace(/^les[-_]?/, 'lesson_'),
+        raw.replace(/^LESSON[-_]?/i, 'lesson_'),
+        lower.replace(/^lesson[-_]?/, 'lesson_'),
+        raw.replace(/[^a-zA-Z0-9]/g, ''),
+        lower.replace(/[^a-z0-9]/g, ''),
+      ])
+    ).filter(Boolean);
+  };
+
+  const moduleAliasMap = new Map();
+  modulesInTrack.forEach((modDoc) => {
+    buildModuleAliases(modDoc).forEach((alias) => {
+      if (!moduleAliasMap.has(alias)) {
+        moduleAliasMap.set(alias, modDoc);
+      }
+    });
+  });
+
+  const lessonsInTrack = await Lesson.find({
+    status: 'active',
+    moduleId: { $in: modulesInTrack.map((modDoc) => modDoc._id) },
+  }).lean();
+
+  const lessonAliasMap = new Map();
+  const registerLessonAliases = (lessonDoc) => {
+    if (!lessonDoc) return;
+    const seeds = [
+      lessonDoc._id,
+      lessonDoc.lessonId,
+      lessonDoc.slug,
+      lessonDoc.title,
+      String(lessonDoc._id),
+      String(lessonDoc.lessonId || ''),
+    ];
+    seeds.forEach((seed) => {
+      if (seed === undefined || seed === null) return;
+      const variants = createLookupVariants(seed);
+      variants.forEach((variant) => {
+        if (variant && !lessonAliasMap.has(variant)) {
+          lessonAliasMap.set(variant, lessonDoc);
+        }
+      });
+      const raw = String(seed).trim();
+      if (raw && !lessonAliasMap.has(raw)) {
+        lessonAliasMap.set(raw, lessonDoc);
+      }
+    });
+  };
+  lessonsInTrack.forEach(registerLessonAliases);
+
+  console.log('[TRACK] startLesson: module alias map prepared', {
+    trackId: String(trackProgress.trackId),
+    modules: modulesInTrack.map((modDoc) => ({
+      id: String(modDoc._id),
+      code: modDoc.moduleId,
+      aliases: Array.from(buildModuleAliases(modDoc)),
+    })),
+  });
+
+  const findModuleProgressFor = (modDoc) => {
+    if (!modDoc) return null;
+    const targetAliases = buildModuleAliases(modDoc);
+    return (
+      trackProgress.modulesProgress?.find((mp) => {
+        const mpAliases = new Set(createLookupVariants(mp.moduleId));
+        for (const alias of targetAliases) {
+          if (mpAliases.has(alias)) return true;
+        }
+        return false;
+      }) || null
+    );
+  };
+
+  let moduleProgress =
+    findModuleProgressByIdentifier(trackProgress, module) ||
+    findModuleProgressFor(module);
+
+  console.log('[TRACK] startLesson: resolved moduleProgress', {
+    moduleId: String(module._id),
+    moduleCode: module.moduleId,
+    status: moduleProgress?.status,
+    lessonsCount: moduleProgress?.lessonsProgress?.length || 0,
+    moduleAliases: Array.from(buildModuleAliases(module)),
+  });
+
+  if (moduleProgress?.lessonsProgress?.length) {
+    console.log('[TRACK] startLesson: existing lessonsProgress snapshot', {
+      lessons: moduleProgress.lessonsProgress.map((lp) => ({
+        lessonId: String(lp.lessonId),
+        status: lp.status,
+        completedAt: lp.completedAt,
+      })),
+    });
+  }
+
+  if (!moduleProgress) {
+    const previousModuleDoc =
+      moduleIndex > 0 ? modulesInTrack[moduleIndex - 1] : null;
+    const previousModuleProgress = previousModuleDoc
+      ? findModuleProgressByIdentifier(trackProgress, previousModuleDoc) ||
+        findModuleProgressFor(previousModuleDoc)
+      : null;
+    const canUnlock =
+      moduleIndex === 0 ||
+      (previousModuleProgress && previousModuleProgress.status === 'completed');
+
+    moduleProgress = {
+      moduleId: module._id,
+      status: canUnlock ? 'unlocked' : 'locked',
+      lessonsProgress: [],
+      quizAttempts: [],
+      labAttempts: [],
+    };
+    if (canUnlock) {
+      moduleProgress.startedAt = new Date();
+    }
+    trackProgress.modulesProgress.push(moduleProgress);
+  }
+
+  if (moduleProgress.status === 'locked') {
+    throw new Error('Module is locked');
+  }
+
+  moduleProgress.startedAt = moduleProgress.startedAt || new Date();
+
+  let lessonProgress = moduleProgress.lessonsProgress.find(
+    (lp) => String(lp.lessonId) === String(lesson._id)
+  );
+
+  if (!lessonProgress) {
+    if (lesson.prerequisites?.length > 0) {
+      const checkResults = [];
+      const prerequisitesCompleted = lesson.prerequisites.every((prereqId) => {
+        const trackMatch = findTrackProgressByIdentifier(
+          trackContext,
+          prereqId
+        );
+        if (trackMatch.trackProgress) {
+          const ok = trackMatch.trackProgress.status === 'completed';
+          checkResults.push({
+            prereqId,
+            type: 'track',
+            ok,
+            status: trackMatch.trackProgress.status,
+          });
+          return ok;
+        }
+
+        if (prereqId.match(/^[0-9a-fA-F]{24}$/)) {
+          const variants = createLookupVariants(prereqId);
+          const moduleDoc =
+            variants.map((v) => moduleAliasMap.get(v)).find(Boolean) ||
+            modulesInTrack.find((m) => String(m._id) === String(prereqId)) ||
+            null;
+          console.log('[TRACK] startLesson: module prerequisite check (ObjectId)', {
+            prereqId,
+            variants,
+            foundModule: moduleDoc
+              ? { id: String(moduleDoc._id), code: moduleDoc.moduleId }
+              : null,
+          });
+          const prereqModuleProgress =
+            (moduleDoc &&
+              (findModuleProgressByIdentifier(trackProgress, moduleDoc) ||
+                findModuleProgressFor(moduleDoc))) ||
+            findModuleProgressByIdentifier(trackProgress, prereqId);
+          console.log('[TRACK] startLesson: module prerequisite progress', {
+            prereqId,
+            status: prereqModuleProgress?.status,
+            exists: !!prereqModuleProgress,
+          });
+          const ok =
+            prereqModuleProgress && prereqModuleProgress.status === 'completed';
+          checkResults.push({ prereqId, type: 'module_objectId', ok });
+          return ok;
+        }
+
+        const variants = createLookupVariants(prereqId);
+        const variantSet = new Set(variants);
+        for (const variant of variants) {
+          const prereqModuleDoc = moduleAliasMap.get(variant);
+          if (prereqModuleDoc) {
+            const prereqModuleProgress =
+              findModuleProgressByIdentifier(trackProgress, prereqModuleDoc) ||
+              findModuleProgressFor(prereqModuleDoc);
+            console.log('[TRACK] startLesson: module code prerequisite check', {
+              prereqId,
+              variant,
+              module: {
+                id: String(prereqModuleDoc._id),
+                code: prereqModuleDoc.moduleId,
+              },
+              status: prereqModuleProgress?.status,
+            });
+            if (
+              prereqModuleProgress &&
+              prereqModuleProgress.status === 'completed'
+            ) {
+              checkResults.push({ prereqId, type: 'module_code', ok: true });
+              return true;
+            }
+            checkResults.push({ prereqId, type: 'module_code', ok: false });
+            return false;
+          }
+        }
+
+        const resolvedLessonDoc = (() => {
+          for (const variant of variantSet) {
+            if (lessonAliasMap.has(variant)) {
+              return lessonAliasMap.get(variant);
+            }
+          }
+          return null;
+        })();
+
+        if (resolvedLessonDoc) {
+          const parentModuleDoc = modulesInTrack.find(
+            (modDoc) => String(modDoc._id) === String(resolvedLessonDoc.moduleId)
+          );
+          const parentModuleProgress =
+            (parentModuleDoc &&
+              (findModuleProgressFor(parentModuleDoc) ||
+                findModuleProgressByIdentifier(trackProgress, parentModuleDoc) ||
+                trackProgress.modulesProgress.find(
+                  (mp) =>
+                    String(mp.moduleId) === String(parentModuleDoc._id) ||
+                    String(mp.moduleId) === String(parentModuleDoc.moduleId)
+                ))) ||
+            null;
+
+          const lessonProgressMatch =
+            parentModuleProgress?.lessonsProgress?.find((lp) => {
+              const lessonVariants = createLookupVariants(lp.lessonId);
+              return (
+                lessonVariants.some((v) => variantSet.has(v)) ||
+                String(lp.lessonId) === String(resolvedLessonDoc._id) ||
+                String(lp.lessonId) === String(resolvedLessonDoc.lessonId)
+              );
+            }) || null;
+
+          console.log('[TRACK] startLesson: lesson prerequisite check', {
+            prereqId,
+            resolvedLessonId: String(resolvedLessonDoc._id),
+            moduleId: String(resolvedLessonDoc.moduleId),
+            progressFound: !!lessonProgressMatch,
+            status: lessonProgressMatch?.status,
+          });
+
+          if (lessonProgressMatch?.status === 'completed') {
+            checkResults.push({ prereqId, type: 'lesson_doc', ok: true });
+            return true;
+          }
+
+          checkResults.push({
+            prereqId,
+            type: 'lesson_doc',
+            ok: false,
+            found: !!lessonProgressMatch,
+            status: lessonProgressMatch?.status || 'missing',
+          });
+          return false;
+        }
+
+        const allModuleProgresses = trackProgress.modulesProgress || [];
+        for (const mp of allModuleProgresses) {
+          const matchedLesson = (mp.lessonsProgress || []).find((lp) => {
+            const lessonVariants = createLookupVariants(lp.lessonId);
+            return lessonVariants.some((v) => variantSet.has(v));
+          });
+          if (matchedLesson) {
+            console.log('[TRACK] startLesson: lesson prerequisite match', {
+              prereqId,
+              moduleId: String(mp.moduleId),
+              lessonId: matchedLesson.lessonId,
+              status: matchedLesson.status,
+            });
+          }
+          if (matchedLesson && matchedLesson.status === 'completed') {
+            checkResults.push({ prereqId, type: 'lesson', ok: true });
+            return true;
+          }
+        }
+
+        checkResults.push({ prereqId, type: 'unknown', ok: false });
+        return false;
+      });
+
+      console.log('[TRACK] startLesson: prerequisite summary', {
+        lessonId: String(lesson._id),
+        lessonName: lesson.title || lesson.name,
+        results: checkResults,
+        passed: prerequisitesCompleted,
+      });
+
+      if (!prerequisitesCompleted) {
+        console.log(
+          '[TRACK] startLesson: blocking lesson start due to unmet prerequisites',
+          {
+            lessonId: String(lesson._id),
+            lessonName: lesson.title || lesson.name,
+          }
+        );
+        throw new Error('Prerequisites not completed');
+      }
+    }
+
+    lessonProgress = {
+      lessonId: lesson._id,
+      status: 'in_progress',
+      timeSpent: 0,
+      lastPosition: 0,
+      completedContentItems: [],
+      startedAt: new Date(),
+    };
+    moduleProgress.lessonsProgress.push(lessonProgress);
+  } else {
+    lessonProgress.status = 'in_progress';
+  }
+
+  if (moduleProgress.status === 'completed' && trackProgress.status !== 'completed') {
+    try {
+      const allDone = await areAllTrackModulesCompleted(
+        trackProgress,
+        trackDoc,
+        module.trackId
+      );
+      if (allDone) {
+        trackProgress.status = 'completed';
+        trackProgress.completedAt = trackProgress.completedAt || new Date();
+      }
+    } catch (err) {
+      console.warn('[TRACK] startLesson: failed to auto-complete track', {
+        trackId: module.trackId,
+        error: err?.message || err,
+      });
+    }
+  }
+
+  progress.currentLesson = lesson._id;
+  if (moduleProgress.status !== 'completed') {
+    moduleProgress.status = 'in_progress';
+  }
+  if (trackProgress.status !== 'completed') {
+    trackProgress.status = 'in_progress';
+  }
+  progress.lastActivityAt = new Date();
+  progress.markModified('tracksProgress');
+  await progress.save();
+
+  return { progress, trackProgress, moduleProgress, lessonProgress };
+}
+
+module.exports = { startTrack, startLesson };

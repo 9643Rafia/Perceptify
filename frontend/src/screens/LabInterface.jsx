@@ -1,12 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Card, Button, Form, Alert, Badge, ProgressBar } from 'react-bootstrap';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { FaCheck, FaTimes } from 'react-icons/fa';
 import QuizzesAPI from '../services/quizzes.api';
+import resolveMediaUrl from '../utils/media';
+import LearningAPI from '../services/learning.api';
 
 const LabInterface = () => {
   const { labId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const locationState = location.state || {};
   const [lab, setLab] = useState(null);
   const [currentChallenge, setCurrentChallenge] = useState(0);
   const [responses, setResponses] = useState([]);
@@ -15,6 +19,8 @@ const LabInterface = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [moduleInfo, setModuleInfo] = useState(null);
+  const [relatedTrackId, setRelatedTrackId] = useState(locationState.trackId || null);
 
   useEffect(() => {
     let mounted = true;
@@ -24,6 +30,22 @@ const LabInterface = () => {
         const data = await QuizzesAPI.getLabById(labId);
         if (!mounted) return;
         setLab(data.lab);
+        const moduleIdentifierRaw = locationState.moduleId || data.lab?.moduleId;
+        const moduleIdentifier =
+          typeof moduleIdentifierRaw === 'object'
+            ? moduleIdentifierRaw?._id || moduleIdentifierRaw?.moduleId
+            : moduleIdentifierRaw;
+        if (moduleIdentifier && !relatedTrackId) {
+          try {
+            const moduleData = await LearningAPI.getModuleById(moduleIdentifier);
+            setModuleInfo(moduleData.module);
+            if (moduleData.module?.trackId) {
+              setRelatedTrackId(moduleData.module.trackId);
+            }
+          } catch (moduleErr) {
+            console.warn('Unable to load module info for lab context', moduleErr);
+          }
+        }
         setResponses(
           data.lab.challenges.map(c => ({
             challengeId: c.challengeId,
@@ -42,6 +64,21 @@ const LabInterface = () => {
 
     return () => { mounted = false; };
   }, [labId]);
+
+  useEffect(() => {
+    if (results?.trackId) {
+      setRelatedTrackId(results.trackId);
+    }
+  }, [results]);
+
+  useEffect(() => {
+    if (showResults && results?.trackCompleted) {
+      const timeout = setTimeout(() => {
+        navigate('/dashboard', { replace: true });
+      }, 2000);
+      return () => clearTimeout(timeout);
+    }
+  }, [showResults, results, navigate]);
 
   const handleVerdictChange = (challengeId, verdict) => {
     setResponses(responses.map(r =>
@@ -66,7 +103,7 @@ const LabInterface = () => {
 
     try {
       setSubmitting(true);
-  const result = await QuizzesAPI.submitLab(labId, responses);
+      const result = await QuizzesAPI.submitLab(labId, responses);
       setResults(result);
       setShowResults(true);
     } catch (err) {
@@ -79,6 +116,7 @@ const LabInterface = () => {
   const renderChallenge = () => {
     const challenge = lab.challenges[currentChallenge];
     const response = responses.find(r => r.challengeId === challenge.challengeId);
+    const challengeMediaUrl = resolveMediaUrl(challenge.mediaUrl);
 
     return (
       <Card className="lms-lab-box">
@@ -98,19 +136,19 @@ const LabInterface = () => {
             {challenge.mediaType === 'video' ? (
               <video
                 controls
-                src={challenge.mediaUrl}
+                src={challengeMediaUrl}
                 style={{ maxWidth: '100%', maxHeight: '600px' }}
               >
                 Your browser does not support the video tag.
               </video>
             ) : challenge.mediaType === 'image' ? (
               <img
-                src={challenge.mediaUrl}
+                src={challengeMediaUrl}
                 alt={challenge.title}
                 style={{ maxWidth: '100%', maxHeight: '600px', objectFit: 'contain' }}
               />
             ) : challenge.mediaType === 'audio' ? (
-              <audio controls src={challenge.mediaUrl} className="w-100">
+              <audio controls src={challengeMediaUrl} className="w-100">
                 Your browser does not support the audio tag.
               </audio>
             ) : null}
@@ -155,6 +193,23 @@ const LabInterface = () => {
   };
 
   const renderResults = () => {
+    const baseTrackId =
+      relatedTrackId ||
+      moduleInfo?.trackId ||
+      lab?.trackId ||
+      null;
+    const resolvedTrackId = results?.trackId || baseTrackId;
+    const isTrackCompleted = !!results?.trackCompleted;
+    const handleReturnToCourse = () => {
+      if (isTrackCompleted) {
+        navigate('/dashboard', { replace: true });
+      } else if (resolvedTrackId) {
+        navigate(`/course/${resolvedTrackId}`, { replace: true });
+      } else {
+        navigate(-1);
+      }
+    };
+
     return (
       <div className="lms-results-box">
         <div className={`lms-score-badge ${results.passed ? 'lms-passed' : 'lms-failed'}`}>
@@ -244,8 +299,13 @@ const LabInterface = () => {
         </div>
 
         <div className="mt-4">
-          <Button variant="primary" onClick={() => navigate(-1)} className="me-2">
-            Back to Module
+          {isTrackCompleted && (
+            <Alert variant="success" className="mb-3">
+              Track completed! Redirecting you to your learning dashboard...
+            </Alert>
+          )}
+          <Button variant="primary" onClick={handleReturnToCourse} className="me-2">
+            Back to {isTrackCompleted ? 'Dashboard' : 'Course'}
           </Button>
           {results.attemptsRemaining > 0 && !results.passed && (
             <Button variant="outline-primary" onClick={() => window.location.reload()}>

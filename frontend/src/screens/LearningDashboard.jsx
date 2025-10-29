@@ -1,9 +1,70 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Container, Row, Col, Card, Button, ProgressBar, Badge, Alert } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 import { FaTrophy, FaFire, FaStar, FaClock, FaAward } from 'react-icons/fa';
 import LearningAPI from '../services/learning.api';
+import DashboardAPI from '../services/dashboard.service';
+import BadgesAPI from '../services/badges.service';
 import ProgressAPI from '../services/progress.api';
+
+const createTrackVariants = (value) => {
+  if (value === undefined || value === null) return [];
+  const raw = String(value).trim();
+  if (!raw) return [];
+
+  const lower = raw.toLowerCase();
+  const condensed = lower.replace(/[^a-z0-9]/g, '');
+  const underscored = lower.replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+
+  const variants = new Set([
+    raw,
+    lower,
+    raw.toUpperCase(),
+    condensed,
+    underscored,
+    raw.replace(/[^a-zA-Z0-9]/g, ''),
+    raw.replace(/[^a-zA-Z0-9]+/g, '_'),
+    `track_${condensed}`,
+    `track_${underscored}`,
+    `track-${condensed}`,
+    `track-${underscored}`
+  ]);
+
+  return Array.from(variants).filter(Boolean);
+};
+
+const buildTrackAliases = (track) => {
+  const aliases = new Set();
+  if (!track) return aliases;
+
+  const add = (value) => {
+    createTrackVariants(value).forEach((variant) => aliases.add(variant));
+  };
+
+  add(track._id);
+  add(track.trackId);
+  add(track.id);
+  add(track.legacyId);
+  add(track.slug);
+
+  if (track.name) {
+    const nameSlug = track.name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+    add(nameSlug);
+    if (nameSlug.includes('_')) {
+      const [firstSegment] = nameSlug.split('_');
+      add(firstSegment);
+      add(`track_${firstSegment}`);
+    }
+    add(`track_${nameSlug}`);
+  }
+
+  if (typeof track.order === 'number') {
+    add(`track_${track.order}`);
+    add(`track${track.order}`);
+  }
+
+  return aliases;
+};
 
 const LearningDashboard = () => {
   const [tracks, setTracks] = useState([]);
@@ -14,8 +75,84 @@ const LearningDashboard = () => {
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
+  const trackAliasMap = useMemo(() => {
+    const map = new Map();
+    (tracks || []).forEach((track) => {
+      buildTrackAliases(track).forEach((alias) => {
+        if (!map.has(alias)) {
+          map.set(alias, track);
+        }
+      });
+    });
+    return map;
+  }, [tracks]);
+
+  const trackProgressLookup = useMemo(() => {
+    const map = new Map();
+    if (!progress?.tracksProgress) return map;
+
+    progress.tracksProgress.forEach((tp) => {
+      const baseId = String(tp.trackId || '');
+      createTrackVariants(baseId).forEach((variant) => {
+        if (!map.has(variant)) {
+          map.set(variant, tp);
+        }
+      });
+
+      const linkedTrack =
+        trackAliasMap.get(baseId) ||
+        trackAliasMap.get(baseId.toLowerCase?.()) ||
+        null;
+
+      if (linkedTrack) {
+        buildTrackAliases(linkedTrack).forEach((alias) => {
+          if (!map.has(alias)) {
+            map.set(alias, tp);
+          }
+        });
+      }
+    });
+
+    return map;
+  }, [progress, trackAliasMap]);
+
+  const getTrackProgressByIdentifier = (identifier) => {
+    if (!identifier && identifier !== 0) return null;
+    const variants = createTrackVariants(identifier);
+
+    for (const variant of variants) {
+      if (trackProgressLookup.has(variant)) {
+        return trackProgressLookup.get(variant);
+      }
+
+      const matchedTrack = trackAliasMap.get(variant);
+      if (matchedTrack) {
+        const matchedAliases = buildTrackAliases(matchedTrack);
+        for (const alias of matchedAliases) {
+          if (trackProgressLookup.has(alias)) {
+            return trackProgressLookup.get(alias);
+          }
+        }
+      }
+    }
+
+    return null;
+  };
+
   useEffect(() => {
     fetchDashboardData();
+  }, []);
+
+  useEffect(() => {
+    const handleFocus = () => {
+      fetchDashboardData();
+    };
+
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+    };
   }, []);
 
   const fetchDashboardData = async () => {
@@ -23,24 +160,41 @@ const LearningDashboard = () => {
       setLoading(true);
       console.log('📊 LearningDashboard: Starting to fetch data...');
 
-      const [tracksData, progressData, statsData, badgesData] = await Promise.all([
+      // Fetch tracks, dashboard stats, badges, and user progress
+      const [tracksData, statsData, badgesData, progressData] = await Promise.all([
         LearningAPI.getAllTracks(),
-        ProgressAPI.getUserProgress(),
-        ProgressAPI.getDashboardStats(),
-        ProgressAPI.getUserBadges()
+        DashboardAPI.getDashboardStats().catch(e => {
+          console.warn('dashboard stats not available', e.message || e);
+          return null;
+        }),
+        BadgesAPI.getUserBadges().catch(e => {
+          console.warn('badges not available', e.message || e);
+          return null;
+        }),
+        ProgressAPI.getUserProgress().catch(e => {
+          console.warn('user progress not available', e.message || e);
+          return null;
+        })
       ]);
 
-      console.log('📊 LearningDashboard: Data received:', {
-        tracksData,
-        progressData,
-        statsData,
-        badgesData
-      });
+      console.log('📊 LearningDashboard: Data received:', { tracksData, statsData, badgesData, progressData });
 
       setTracks(tracksData);
-      setProgress(progressData);
       setStats(statsData);
       setBadges(badgesData);
+      setProgress(progressData);
+
+      try {
+        if (typeof window !== 'undefined') {
+          if (progressData) {
+            localStorage.setItem('progress', JSON.stringify(progressData));
+          } else {
+            localStorage.removeItem('progress');
+          }
+        }
+      } catch (storageErr) {
+        console.warn('📦 LearningDashboard: Failed to sync progress to localStorage', storageErr);
+      }
 
       console.log('📊 LearningDashboard: State updated, tracks count:', tracksData?.length);
     } catch (err) {
@@ -53,14 +207,9 @@ const LearningDashboard = () => {
 
   const handleStartTrack = async (trackId) => {
     try {
-      const response = await ProgressAPI.startTrack(trackId);
-      // Some server responses include a flag/modulesCount to indicate modules were populated
-      const modulesAdded = response?.data?.modulesAdded || response?.headers?.['x-modules-added'] === 'true';
-      if (modulesAdded) {
-        // Re-fetch progress to ensure UI has the latest modulesProgress
-        const refreshedProgress = await ProgressAPI.getUserProgress();
-        setProgress(refreshedProgress);
-      }
+      await ProgressAPI.startTrack(trackId);
+      // If server populated modules, just navigate to the course page which will
+      // fetch module progress when available.
       navigate(`/course/${trackId}`);
     } catch (err) {
       setError('Failed to start track: ' + err.response?.data?.message);
@@ -83,10 +232,7 @@ const LearningDashboard = () => {
     }
   };
 
-  const getTrackProgress = (trackId) => {
-    if (!progress || !progress.tracksProgress) return null;
-    return progress.tracksProgress.find(tp => tp.trackId === trackId);
-  };
+  const getTrackProgress = (trackId) => getTrackProgressByIdentifier(trackId);
 
   const calculateTrackCompletion = (trackProgress) => {
     if (!trackProgress || !trackProgress.modulesProgress) return 0;
@@ -100,13 +246,28 @@ const LearningDashboard = () => {
   };
 
   const isTrackUnlocked = (track) => {
-    if (!track.prerequisites || track.prerequisites.length === 0) return true;
-    if (!progress || !progress.tracksProgress) return false;
+    if (!track?.prerequisites || track.prerequisites.length === 0) return true;
+    if (!progress?.tracksProgress) return false;
 
-    return track.prerequisites.every(prereqId => {
-      const prereqProgress = progress.tracksProgress.find(tp => tp.trackId === prereqId);
-      return prereqProgress && prereqProgress.status === 'completed';
+    const evaluation = track.prerequisites.map((prereqId) => {
+      const prereqProgress = getTrackProgressByIdentifier(prereqId);
+      return {
+        prereqId,
+        found: !!prereqProgress,
+        status: prereqProgress?.status || 'missing'
+      };
     });
+
+    const unlocked = evaluation.every((entry) => entry.found && entry.status === 'completed');
+
+    console.log('🔐 LearningDashboard: track unlock evaluation', {
+      trackId: track._id,
+      trackName: track.name,
+      prerequisites: evaluation,
+      unlocked
+    });
+
+    return unlocked;
   };
 
   const formatTime = (seconds) => {
@@ -260,16 +421,16 @@ const LearningDashboard = () => {
                     </div>
 
                     {!unlocked ? (
-                      <Button variant="secondary" disabled block>
+                      <Button variant="secondary" disabled className="w-100">
                         🔒 Locked
                       </Button>
                     ) : trackProgress?.status === 'completed' ? (
-                      <Button variant="success" onClick={() => navigate(`/course/${track._id}`)} block>
+                      <Button variant="success" onClick={() => navigate(`/course/${track._id}`)} className="w-100">
                         <FaTrophy className="me-2" />
                         View Certificate
                       </Button>
                     ) : trackProgress ? (
-                      <Button variant="primary" onClick={() => navigate(`/course/${track._id}`)} block>
+                      <Button variant="primary" onClick={() => navigate(`/course/${track._id}`)} className="w-100">
                         Continue Track
                       </Button>
                     ) : (

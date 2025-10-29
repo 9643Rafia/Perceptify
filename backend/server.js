@@ -12,9 +12,13 @@ const assessmentRoutes = require("./routes/assessment.routes")
 const userRoutes = require("./routes/user.routes")
 const learningRoutes = require("./routes/learning.routes")
 const quizRoutes = require("./routes/quiz.routes")
-const progressRoutes = require("./routes/progress.routes")
+const progressRoutes = require('./routes/progress.routes');
+const analyticsRoutes = require('./routes/analytics.routes');
+const gamificationRoutes = require('./routes/gamification.routes');
+const certificateRoutes = require('./routes/certificate.routes');
 const adminRoutes = require("./routes/admin.routes")
 const forumRoutes = require("./routes/forum.routes")
+const mediaRoutes = require('./routes/media.routes')
 
 
 // Connect to database
@@ -30,10 +34,7 @@ app.use(morgan("dev"))
 
 // Debug middleware - log all requests
 app.use((req, res, next) => {
-  console.log(`🌐 ${new Date().toISOString()} - ${req.method} ${req.url}`)
-  console.log('📋 Headers:', req.headers)
   if (req.body && Object.keys(req.body).length > 0) {
-    console.log('📦 Body:', req.body)
   }
   next()
 })
@@ -50,7 +51,10 @@ app.use('/api/quizzes', quizRoutes)
 app.use('/api/progress', progressRoutes)
 app.use('/api/admin', adminRoutes)
 app.use('/api/forum', forumRoutes)
-
+app.use('/media', mediaRoutes)
+app.use('/api/analytics', analyticsRoutes);
+app.use('/api/gamification', gamificationRoutes);
+app.use('/api/certificates', certificateRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

@@ -1,8 +1,54 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Container, Row, Col, Card, Button, ProgressBar, Badge, Alert } from 'react-bootstrap';
 import { useParams, useNavigate } from 'react-router-dom';
 import { FaLock, FaCheck, FaClock, FaPlay } from 'react-icons/fa';
 import LearningAPI from '../services/learning.api';
+
+const buildModuleAliases = (module) => {
+  const aliases = new Set();
+  if (!module) return aliases;
+
+  const objId = module._id ? String(module._id) : null;
+  if (objId) {
+    aliases.add(objId);
+    aliases.add(objId.toLowerCase());
+  }
+
+  const modId = module.moduleId ? String(module.moduleId) : null;
+  if (modId) {
+    const raw = modId;
+    const lower = raw.toLowerCase();
+
+    aliases.add(raw);
+    aliases.add(lower);
+
+    const modAsModule = lower.replace(/^mod[-_]?/, 'module_');
+    aliases.add(modAsModule);
+
+    const modulePrefixNormalized = lower.replace(/^module[-_]?/, 'module_');
+    aliases.add(modulePrefixNormalized);
+
+    const alphanumeric = lower.replace(/[^a-z0-9]/g, '');
+    if (alphanumeric) aliases.add(alphanumeric);
+  }
+
+  return aliases;
+};
+
+const createLookupKeyVariants = (value) => {
+  if (!value && value !== 0) return [];
+  const raw = String(value);
+  const variants = new Set();
+  variants.add(raw);
+  variants.add(raw.toLowerCase());
+  variants.add(raw.replace(/^MOD[-_]?/i, 'module_'));
+  variants.add(raw.toLowerCase().replace(/^mod[-_]?/, 'module_'));
+  variants.add(raw.replace(/^MODULE[-_]?/i, 'module_'));
+  variants.add(raw.toLowerCase().replace(/^module[-_]?/, 'module_'));
+  variants.add(raw.replace(/[^a-zA-Z0-9]/g, ''));
+  variants.add(raw.toLowerCase().replace(/[^a-z0-9]/g, ''));
+  return Array.from(variants).filter(Boolean);
+};
 
 const CourseView = () => {
   const { trackId } = useParams();
@@ -13,30 +59,144 @@ const CourseView = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        setLoading(true);
-        const data = await LearningAPI.getTrackById(trackId);
-        if (!mounted) return;
-        setTrack(data.track);
-        setModules(data.modules);
-        setProgress(data.progress);
-      } catch (err) {
-        setError('Failed to load course data');
-        console.error(err);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    })();
-
-    return () => { mounted = false; };
+  const loadCourseData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const data = await LearningAPI.getTrackById(trackId);
+      console.log('Loaded course data:', {
+        track: data.track?.name,
+        modulesCount: data.modules?.length,
+        progress: data.progress ? {
+          modulesProgressCount: data.progress.modulesProgress?.length,
+          modulesProgress: data.progress.modulesProgress?.map(mp => ({ id: mp.moduleId, status: mp.status }))
+        } : null
+      });
+      setTrack(data.track);
+      setModules(data.modules);
+      setProgress(data.progress);
+      setError('');
+    } catch (err) {
+      setError('Failed to load course data');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
   }, [trackId]);
 
+  useEffect(() => {
+    loadCourseData();
+  }, [loadCourseData]);
+
+  // Refresh progress when component comes back into focus
+  useEffect(() => {
+    const handleFocus = () => {
+      loadCourseData();
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [loadCourseData]);
+
+  const moduleLookup = useMemo(() => {
+    const map = new Map();
+    modules.forEach(mod => {
+      buildModuleAliases(mod).forEach(alias => {
+        if (!map.has(alias)) {
+          map.set(alias, mod);
+        }
+      });
+    });
+    return map;
+  }, [modules]);
+
+  useEffect(() => {
+    if (modules?.length) {
+      console.log(
+        '📚 CourseView: modules list',
+        modules.map(mod => ({
+          _id: String(mod._id),
+          moduleId: mod.moduleId || null,
+          order: mod.order,
+          name: mod.name,
+          prerequisites: mod.prerequisites || []
+        }))
+      );
+    } else {
+      console.log('📚 CourseView: no modules received yet');
+    }
+  }, [modules]);
+
+  const progressLookup = useMemo(() => {
+    const map = new Map();
+    if (progress?.modulesProgress) {
+      progress.modulesProgress.forEach(mp => {
+        const key = String(mp.moduleId);
+        map.set(key, mp);
+
+        const lowerKey = key.toLowerCase();
+        const modKeyVariant = key.replace(/^MOD[-_]?/i, 'module_');
+        const lowerModKeyVariant = lowerKey.replace(/^mod[-_]?/, 'module_');
+
+        const linkedModule =
+          moduleLookup.get(key) ||
+          moduleLookup.get(lowerKey) ||
+          moduleLookup.get(modKeyVariant) ||
+          moduleLookup.get(lowerModKeyVariant);
+
+        if (linkedModule) {
+          buildModuleAliases(linkedModule).forEach(alias => {
+            if (!map.has(alias)) {
+              map.set(alias, mp);
+            }
+          });
+        } else {
+          createLookupKeyVariants(key).forEach(alias => {
+            if (!map.has(alias)) {
+              map.set(alias, mp);
+            }
+          });
+        }
+      });
+    }
+    return map;
+  }, [progress, moduleLookup]);
+
+  useEffect(() => {
+    if (progress?.modulesProgress) {
+      console.log(
+        '📈 CourseView: progress list',
+        progress.modulesProgress.map(mp => ({
+          moduleId: String(mp.moduleId),
+          status: mp.status,
+          bestQuizScore: mp.bestQuizScore,
+          lessonsCount: mp.lessonsProgress?.length || 0
+        }))
+      );
+    } else {
+      console.log('📈 CourseView: no module progress from server yet');
+    }
+  }, [progress]);
+
+  const findModuleByIdentifier = (identifier) => {
+    if (!identifier && identifier !== 0) return null;
+    const attempts = createLookupKeyVariants(identifier);
+    for (const attempt of attempts) {
+      if (moduleLookup.has(attempt)) {
+        return moduleLookup.get(attempt);
+      }
+    }
+    return null;
+  };
+
   const getModuleProgress = (moduleId) => {
-    if (!progress || !progress.modulesProgress) return null;
-    return progress.modulesProgress.find(mp => mp.moduleId === moduleId);
+    if (!moduleId) return null;
+    const attempts = createLookupKeyVariants(moduleId);
+    for (const key of attempts) {
+      if (progressLookup.has(key)) {
+        return progressLookup.get(key);
+      }
+    }
+    return null;
   };
 
   const calculateModuleCompletion = (moduleProgress) => {
@@ -50,22 +210,130 @@ const CourseView = () => {
     return totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
   };
 
-  const isModuleUnlocked = (module) => {
-    if (!module.prerequisites || module.prerequisites.length === 0) return true;
-    if (!progress || !progress.modulesProgress) return false;
+  const prerequisitesMet = (module) => {
+    if (!module?.prerequisites || module.prerequisites.length === 0) return true;
 
     return module.prerequisites.every(prereqId => {
-      const prereqProgress = progress.modulesProgress.find(mp => mp.moduleId === prereqId);
-      return prereqProgress && prereqProgress.status === 'completed';
+      const prereqModule = findModuleByIdentifier(prereqId);
+      if (!prereqModule) {
+        if (typeof prereqId === 'string' && prereqId.toLowerCase().includes('track')) {
+          console.log('📎 CourseView: treating track-level prerequisite as satisfied (backend enforces track completion)', {
+            moduleId: String(module._id),
+            moduleName: module.name,
+            prereqId
+          });
+          return true;
+        }
+        console.warn('Prerequisite module not found in course data:', prereqId);
+        return false;
+      }
+
+      const prereqProgress = getModuleProgress(prereqModule._id);
+      return prereqProgress?.status === 'completed';
     });
   };
 
-  const handleModuleClick = (module) => {
-    const unlocked = isModuleUnlocked(module);
+  const isModuleUnlocked = (module, index) => {
+    const moduleProgress = getModuleProgress(module._id);
+    const prereqsSatisfied = prerequisitesMet(module);
+    const previousModule = index > 0 ? modules[index - 1] : null;
+    const previousProgress = previousModule ? getModuleProgress(previousModule._id) : null;
+    const previousStatus = previousProgress?.status || 'none';
+
+    if (!progress) {
+      // Track not started yet - allow only the very first module to be previewed
+      const decision = index === 0;
+      console.log('🔐 CourseView: gate check (no progress yet)', {
+        moduleId: String(module._id),
+        moduleName: module.name,
+        index,
+        decision
+      });
+      return decision;
+    }
+
+    if (!moduleProgress) {
+      if (!prereqsSatisfied) {
+        console.log('🔐 CourseView: gate check (missing prereqs, no progress record)', {
+          moduleId: String(module._id),
+          moduleName: module.name,
+          index,
+          prereqsSatisfied,
+          decision: false
+        });
+        return false;
+      }
+
+      // Fallback: allow only if prerequisites satisfied and previous module is completed
+      if (index === 0) {
+        console.log('🔐 CourseView: gate check (first module without progress record)', {
+          moduleId: String(module._id),
+          moduleName: module.name,
+          index,
+          decision: true
+        });
+        return true;
+      }
+
+      const decision = previousStatus === 'completed';
+      console.log('🔐 CourseView: gate check (no progress record, using previous module status)', {
+        moduleId: String(module._id),
+        moduleName: module.name,
+        index,
+        previousModuleId: previousModule ? String(previousModule._id) : null,
+        previousStatus,
+        decision
+      });
+      return decision;
+    }
+
+    const status = moduleProgress.status || 'unlocked';
+    if (status === 'locked') {
+      console.log('🔐 CourseView: gate check (explicit locked status)', {
+        moduleId: String(module._id),
+        moduleName: module.name,
+        index,
+        status,
+        prereqsSatisfied,
+        decision: false
+      });
+      return false;
+    }
+
+    const decision = prereqsSatisfied;
+    console.log('🔐 CourseView: gate check (unlocked/in progress/completed)', {
+      moduleId: String(module._id),
+      moduleName: module.name,
+      index,
+      status,
+      prereqsSatisfied,
+      decision
+    });
+    return decision;
+  };
+
+  const handleModuleClick = (module, index) => {
+    const unlocked = isModuleUnlocked(module, index);
     if (unlocked) {
       navigate(`/module/${module._id}`);
     }
   };
+
+  const totalModules = modules.length;
+  const completedModulesCount = progress?.modulesProgress
+    ? progress.modulesProgress.filter(mp => mp.status === 'completed').length
+    : 0;
+  const unlockedModulesCount = progress?.modulesProgress
+    ? progress.modulesProgress.filter(mp => mp.status && mp.status !== 'locked').length
+    : 0;
+  const completionPercent = totalModules > 0
+    ? Math.round((completedModulesCount / totalModules) * 100)
+    : 0;
+  const currentModuleNumber = progress
+    ? totalModules > 0
+      ? Math.min(totalModules, Math.max(1, unlockedModulesCount))
+      : 0
+    : 0;
 
   if (loading) {
     return (
@@ -134,7 +402,7 @@ const CourseView = () => {
             {modules.map((module, index) => {
               const moduleProgress = getModuleProgress(module._id);
               const completion = calculateModuleCompletion(moduleProgress);
-              const unlocked = isModuleUnlocked(module);
+              const unlocked = isModuleUnlocked(module, index);
               const status = moduleProgress?.status || 'locked';
 
               return (
@@ -143,7 +411,7 @@ const CourseView = () => {
                   className={`lms-module-card ${!unlocked ? 'lms-locked' : ''} ${
                     status === 'completed' ? 'lms-completed' : ''
                   } ${status === 'in_progress' ? 'lms-in-progress' : ''}`}
-                  onClick={() => handleModuleClick(module)}
+                  onClick={() => handleModuleClick(module, index)}
                   style={{ cursor: unlocked ? 'pointer' : 'not-allowed' }}
                 >
                   <Card.Body>
@@ -215,14 +483,18 @@ const CourseView = () => {
                     <div className="mb-3">
                       <div className="d-flex justify-content-between mb-1">
                         <small>Overall Completion</small>
-                        <small>
-                          {progress.modulesProgress.filter(m => m.status === 'completed').length} / {modules.length} modules
-                        </small>
+                        <small>{completionPercent}%</small>
                       </div>
                       <ProgressBar
-                        now={(progress.modulesProgress.filter(m => m.status === 'completed').length / modules.length) * 100}
-                        variant="success"
+                        now={completionPercent}
+                        variant={completionPercent === 100 ? 'success' : 'primary'}
                       />
+                      <div className="d-flex justify-content-between mt-2">
+                        <small>Current Module</small>
+                        <small>
+                          Module {currentModuleNumber} / {totalModules || 0}
+                        </small>
+                      </div>
                     </div>
 
                     <hr />

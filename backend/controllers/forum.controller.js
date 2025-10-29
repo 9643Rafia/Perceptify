@@ -85,7 +85,18 @@ exports.getPost = async (req, res) => {
 exports.createPost = async (req, res) => {
   try {
     const { content } = req.body
-    const userId = req.user.userId
+    const userId =
+      req.user?._id?.toString?.() ||
+      req.user?.id?.toString?.() ||
+      req.user?.userId?.toString?.() ||
+      (typeof req.user === 'string' ? req.user : null)
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required to create a post"
+      })
+    }
 
     // Validate input
     const validationError = validatePostContent(content)
@@ -126,7 +137,18 @@ exports.addComment = async (req, res) => {
   try {
     const { postId } = req.params
     const { content } = req.body
-    const userId = req.user.userId
+    const userId =
+      req.user?._id?.toString?.() ||
+      req.user?.id?.toString?.() ||
+      req.user?.userId?.toString?.() ||
+      (typeof req.user === 'string' ? req.user : null)
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required to comment"
+      })
+    }
 
     // Validate input
     const validationError = validateCommentContent(content)
@@ -178,7 +200,18 @@ exports.addComment = async (req, res) => {
 exports.deletePost = async (req, res) => {
   try {
     const { postId } = req.params
-    const userId = req.user.userId
+    const userId =
+      req.user?._id?.toString?.() ||
+      req.user?.id?.toString?.() ||
+      req.user?.userId?.toString?.() ||
+      (typeof req.user === 'string' ? req.user : null)
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required"
+      })
+    }
 
     const post = await ForumPost.findById(postId)
 
@@ -217,7 +250,18 @@ exports.deletePost = async (req, res) => {
 exports.deleteComment = async (req, res) => {
   try {
     const { postId, commentId } = req.params
-    const userId = req.user.userId
+    const userId =
+      req.user?._id?.toString?.() ||
+      req.user?.id?.toString?.() ||
+      req.user?.userId?.toString?.() ||
+      (typeof req.user === 'string' ? req.user : null)
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required"
+      })
+    }
 
     const post = await ForumPost.findById(postId)
 

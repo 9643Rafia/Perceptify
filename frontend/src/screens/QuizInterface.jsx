@@ -1,12 +1,22 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Container, Row, Col, Card, Button, Form, Alert, Badge } from 'react-bootstrap';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { FaCheck, FaTimes, FaFlag, FaClock } from 'react-icons/fa';
 import QuizzesAPI from '../services/quizzes.api';
+import LessonProgressAPI from '../services/lessonProgress.service';
+import LearningAPI from '../services/learning.api';
 
 const QuizInterface = () => {
   const { quizId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const lessonId = searchParams.get('lessonId');
+  const contentId = searchParams.get('contentId');
+  const locationState = location.state || {};
+  const [moduleInfo, setModuleInfo] = useState(null);
+  const [relatedTrackId, setRelatedTrackId] = useState(locationState.trackId || null);
+  const [moduleIdOverride] = useState(locationState.moduleId || null);
   const [quiz, setQuiz] = useState(null);
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState({});
@@ -28,6 +38,22 @@ const QuizInterface = () => {
         const data = await QuizzesAPI.getQuizById(quizId);
         if (!mounted) return;
         setQuiz(data.quiz);
+        const moduleIdentifierRaw = moduleIdOverride || data.quiz?.moduleId;
+        const moduleIdentifier =
+          typeof moduleIdentifierRaw === 'object'
+            ? moduleIdentifierRaw?._id || moduleIdentifierRaw?.moduleId
+            : moduleIdentifierRaw;
+        if (moduleIdentifier && !relatedTrackId) {
+          try {
+            const moduleData = await LearningAPI.getModuleById(moduleIdentifier);
+            setModuleInfo(moduleData.module);
+            if (moduleData.module?.trackId) {
+              setRelatedTrackId(moduleData.module.trackId);
+            }
+          } catch (moduleErr) {
+            console.warn('Unable to load module info for quiz context', moduleErr);
+          }
+        }
       } catch (err) {
         setError('Failed to load quiz');
         console.error(err);
@@ -62,6 +88,21 @@ const QuizInterface = () => {
   }, [quiz, showResults]);
 
   
+
+  useEffect(() => {
+    if (results?.trackId) {
+      setRelatedTrackId(results.trackId);
+    }
+  }, [results]);
+
+  useEffect(() => {
+    if (showResults && results?.trackCompleted) {
+      const timeout = setTimeout(() => {
+        navigate('/dashboard', { replace: true });
+      }, 2000);
+      return () => clearTimeout(timeout);
+    }
+  }, [showResults, results, navigate]);
 
   const handleAnswerSelect = (questionId, answer) => {
     const question = quiz.questions.find(q => q.questionId === questionId);
@@ -116,8 +157,69 @@ const QuizInterface = () => {
         markedForReview: markedForReview.has(q.questionId)
       }));
 
-      const startTime = quiz.timeLimit ? quiz.timeLimit * 60 - timeRemaining : 0;
-  const result = await QuizzesAPI.submitQuiz(quizId, formattedAnswers, startTime);
+      const timeSpentSeconds =
+        quiz.timeLimit && typeof timeRemaining === 'number'
+          ? Math.max(0, quiz.timeLimit * 60 - timeRemaining)
+          : null;
+      const result = await QuizzesAPI.submitQuiz(quizId, formattedAnswers, timeSpentSeconds);
+
+      // If this is a mini-quiz from a lesson, mark the content as complete
+      if (lessonId && contentId && result.passed) {
+        console.log('🎯 QUIZ COMPLETION: Starting lesson progress update', {
+          lessonId,
+          contentId,
+          quizPassed: result.passed,
+          score: result.score
+        });
+
+        try {
+          // Get current lesson progress to append the completed content
+          console.log('📡 QUIZ COMPLETION: Fetching current lesson progress...');
+          const lessonData = await LearningAPI.getLessonById(lessonId);
+          const currentCompleted = lessonData.progress?.completedContentItems || [];
+          console.log('📊 QUIZ COMPLETION: Current completed items:', currentCompleted);
+
+          if (!currentCompleted.includes(contentId)) {
+            console.log('💾 QUIZ COMPLETION: Updating backend progress...');
+            await LessonProgressAPI.updateLessonProgress(lessonId, {
+              completedContentItems: [...currentCompleted, contentId]
+            });
+            console.log('✅ QUIZ COMPLETION: Backend progress updated successfully');
+          } else {
+            console.log('⚠️ QUIZ COMPLETION: Content already marked as completed');
+          }
+
+          // Also update localStorage for immediate lesson player sync
+          const lsKey = `lesson:${lessonId}`;
+          console.log('💽 QUIZ COMPLETION: Updating lesson localStorage...', { lsKey });
+
+          try {
+            const existing = localStorage.getItem(lsKey);
+            let localData = existing ? JSON.parse(existing) : {};
+            console.log('📈 QUIZ COMPLETION: Current localStorage data:', localData);
+
+            if (!localData.completedContentItems) localData.completedContentItems = [];
+            if (!localData.completedContentItems.includes(contentId)) {
+              localData.completedContentItems = [...localData.completedContentItems, contentId];
+              localData.t = Date.now();
+              localStorage.setItem(lsKey, JSON.stringify(localData));
+              console.log('✅ QUIZ COMPLETION: localStorage updated successfully:', localData);
+            } else {
+              console.log('⚠️ QUIZ COMPLETION: Content already in localStorage');
+            }
+          } catch (localErr) {
+            console.error('❌ QUIZ COMPLETION: Failed to update lesson localStorage:', localErr);
+          }
+        } catch (progressErr) {
+          console.error('❌ QUIZ COMPLETION: Failed to update lesson progress:', progressErr);
+        }
+      } else {
+        console.log('🚫 QUIZ COMPLETION: Skipping lesson update', {
+          hasLessonId: !!lessonId,
+          hasContentId: !!contentId,
+          quizPassed: result.passed
+        });
+      }
 
       setResults(result);
       setShowResults(true);
@@ -230,6 +332,24 @@ const QuizInterface = () => {
   };
 
   const renderResults = () => {
+    const baseTrackId =
+      relatedTrackId ||
+      moduleInfo?.trackId ||
+      quiz?.trackId ||
+      quiz?.module?.trackId ||
+      null;
+    const resolvedTrackId = results?.trackId || baseTrackId;
+    const isTrackCompleted = !!results?.trackCompleted;
+    const handleReturnToCourse = () => {
+      if (isTrackCompleted) {
+        navigate('/dashboard', { replace: true });
+      } else if (resolvedTrackId) {
+        navigate(`/course/${resolvedTrackId}`, { replace: true });
+      } else {
+        navigate(-1);
+      }
+    };
+
     return (
       <div className="lms-results-box">
         <div className={`lms-score-badge ${results.passed ? 'lms-passed' : 'lms-failed'}`}>
@@ -335,8 +455,13 @@ const QuizInterface = () => {
         </div>
 
         <div className="mt-4">
-          <Button variant="primary" onClick={() => navigate(-1)} className="me-2">
-            Back to Module
+          {isTrackCompleted && (
+            <Alert variant="success" className="mb-3">
+              Track completed! Redirecting you to your learning dashboard...
+            </Alert>
+          )}
+          <Button variant="primary" onClick={handleReturnToCourse} className="me-2">
+            Back to {isTrackCompleted ? 'Dashboard' : 'Course'}
           </Button>
           {results.attemptsRemaining > 0 && !results.passed && (
             <Button variant="outline-primary" onClick={() => window.location.reload()}>

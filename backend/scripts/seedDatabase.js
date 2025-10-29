@@ -119,8 +119,8 @@ const seedContent = async () => {
   console.log(`✅ Inserted ${content.length} content items`);
 };
 
-const createSampleQuizzes = async () => {
-  console.log('\n❓ Creating Sample Quizzes...');
+const createModuleQuizzes = async () => {
+  console.log('\n❓ Creating Module Quizzes...');
   const modules = await Module.find({});
   const quizzes = [];
 
@@ -182,9 +182,64 @@ const createSampleQuizzes = async () => {
 
   if (quizzes.length) {
     await Quiz.insertMany(quizzes);
-    console.log(`✅ Created ${quizzes.length} sample quizzes`);
+    console.log(`✅ Created ${quizzes.length} module quizzes`);
   } else {
     console.log('⚠️  No modules with quizId found');
+  }
+};
+
+const createContentQuizzes = async () => {
+  console.log('\n❓ Creating Content Mini Quizzes...');
+  const contentItems = await Content.find({ quizId: { $exists: true, $ne: null } });
+  const quizzes = [];
+
+  for (const content of contentItems) {
+    if (!content.quizId) continue;
+    const quiz = {
+      quizId: content.quizId,
+      title: `Mini Quiz for ${content.title}`,
+      description: `Quick assessment for ${content.title}`,
+      timeLimit: 600, // 10 minutes for mini quiz
+      passingScore: 70,
+      randomizeQuestions: false,
+      allowReview: true,
+      showResults: true,
+      questions: [
+        {
+          questionId: `${content.quizId}_q1`,
+          order: 1,
+          questionType: 'multiple_choice',
+          questionText: `What is the main topic of this content?`,
+          points: 10,
+          options: [
+            { optionId: 'a', text: 'Topic A', isCorrect: true },
+            { optionId: 'b', text: 'Topic B', isCorrect: false },
+            { optionId: 'c', text: 'Topic C', isCorrect: false },
+            { optionId: 'd', text: 'Topic D', isCorrect: false }
+          ]
+        },
+        {
+          questionId: `${content.quizId}_q2`,
+          order: 2,
+          questionType: 'true_false',
+          questionText: `True or False: This content is relevant to deepfake detection.`,
+          points: 10,
+          options: [
+            { optionId: 'true', text: 'True', isCorrect: true },
+            { optionId: 'false', text: 'False', isCorrect: false }
+          ]
+        }
+      ],
+      status: 'active'
+    };
+    quizzes.push(quiz);
+  }
+
+  if (quizzes.length) {
+    await Quiz.insertMany(quizzes);
+    console.log(`✅ Created ${quizzes.length} content mini quizzes`);
+  } else {
+    console.log('⚠️  No content items with quizId found');
   }
 };
 
@@ -282,7 +337,8 @@ const seedDatabase = async () => {
   const moduleMap = await seedModules(trackMap);
   await seedLessons(moduleMap);
   await seedContent();
-  await createSampleQuizzes();
+  await createModuleQuizzes();
+  await createContentQuizzes();
   await createSampleLabs();
   await createSampleBadges();
   await verifyDatabase();

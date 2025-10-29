@@ -58,3 +58,10 @@ cd ./frontend && npm run start
 cd ./backend && npm run dev (for development)
 
 cd ./backend && npm run start (for production)
+
+GOALS:
+Make sure we have videos being properly provided from the backend
+Make sure the lesson is marked as complete we get a toaster notification + next Make next module unlock
+Make next track unlock
+Be able to make post on community
+All lessons have some content

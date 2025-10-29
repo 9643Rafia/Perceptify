@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Button, Alert } from 'react-bootstrap';
 import { useParams, useNavigate } from 'react-router-dom';
 import { FaDownload, FaShareAlt, FaAward } from 'react-icons/fa';
-import ProgressAPI from '../services/progress.api';
+import CertificatesAPI from '../services/certificates.service';
 
 const CertificateView = () => {
   const { certId } = useParams();
@@ -16,7 +16,7 @@ const CertificateView = () => {
     (async () => {
       try {
         setLoading(true);
-        const certificates = await ProgressAPI.getUserCertificates();
+  const certificates = await CertificatesAPI.getUserCertificates();
         if (!mounted) return;
         const cert = certificates.find(c => c._id === certId || c.certificateId === certId);
 

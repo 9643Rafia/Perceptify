@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon --config nodemon.json server.js",
-    "seed:forum": "node scripts/seedForumData.js",
+    "seed:all": "node scripts/seedDatabase.js",
     "update:videos": "node scripts/updateVideoUrls.js"
   },
   "dependencies": {
