@@ -10,6 +10,63 @@ import InteractiveContent from '../components/InteractiveContent';
 
 const API_BASE = process.env.REACT_APP_API_BASE || 'http://localhost:5000/api';
 
+const MEDIA_FIELD_PRIORITY = [
+  'url',
+  'mediaUrl',
+  'mediaURL',
+  'sourceUrl',
+  'sourceURL',
+  'videoUrl',
+  'videoURL',
+  'assetUrl',
+  'assetURL'
+];
+
+const isLikelyMediaPath = (value = '') => {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('/')) {
+    return true;
+  }
+  return /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(trimmed);
+};
+
+const collectMediaCandidates = (node, accumulator) => {
+  if (!node) return;
+  if (typeof node === 'string') {
+    if (isLikelyMediaPath(node)) accumulator.add(node.trim());
+    return;
+  }
+  if (Array.isArray(node)) {
+    node.forEach((item) => collectMediaCandidates(item, accumulator));
+    return;
+  }
+  if (typeof node === 'object') {
+    MEDIA_FIELD_PRIORITY.forEach((key) => {
+      if (typeof node[key] === 'string' && isLikelyMediaPath(node[key])) {
+        accumulator.add(node[key].trim());
+      }
+    });
+    Object.values(node).forEach((value) => collectMediaCandidates(value, accumulator));
+  }
+};
+
+const getPreferredMediaUrl = (content) => {
+  if (!content) return '';
+  const candidates = new Set();
+
+  MEDIA_FIELD_PRIORITY.forEach((key) => {
+    if (typeof content[key] === 'string' && isLikelyMediaPath(content[key])) {
+      candidates.add(content[key].trim());
+    }
+  });
+
+  collectMediaCandidates(content.metadata, candidates);
+
+  const [firstCandidate] = Array.from(candidates);
+  return firstCandidate || '';
+};
+
 const LessonPlayer = () => {
   const { lessonId } = useParams();
   const navigate = useNavigate();
@@ -406,11 +463,29 @@ const LessonPlayer = () => {
     if (!content[currentContentIndex]) return null;
 
     const currentContent = content[currentContentIndex];
-    // moved logging to a useEffect to avoid logging on every timer tick
+      // moved logging to a useEffect to avoid logging on every timer tick
     switch (currentContent.type) {
       case 'video': {
-        const resolvedVideoUrl = resolveMediaUrl(currentContent.url);
-        console.log('🎬 LessonPlayer: Rendering video with URL:', currentContent.url, '=>', resolvedVideoUrl);
+        const preferredMediaUrl = getPreferredMediaUrl(currentContent);
+        const resolvedVideoUrl = resolveMediaUrl(preferredMediaUrl);
+        console.log('🎬 LessonPlayer: Rendering video with URL:', {
+          original: currentContent.url,
+          preferred: preferredMediaUrl,
+          resolved: resolvedVideoUrl
+        });
+
+        if (!preferredMediaUrl) {
+          return (
+            <div className="lms-content-box">
+              <h3>{currentContent.title}</h3>
+              <p>{currentContent.description}</p>
+              <Alert variant="warning" className="mt-3">
+                We couldn&apos;t find a media URL for this lesson item. Please contact your administrator or try again later.
+              </Alert>
+            </div>
+          );
+        }
+
         return (
           <div className="lms-video-wrapper">
             <video
