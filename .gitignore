@@ -1,50 +1,33 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# Node
+node_modules/
 
-# dependencies
-/node_modules
-/.pnp
-.pnp.js
-
-# testing
-/coverage
-
-# production
-/build
-/dist
-/out
-
-
-# misc
-.DS_Store
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+# Monorepo/subfolders
+backend/node_modules/
+frontend/node_modules/
 
 # Logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-*.log
-logs/
 
-# environment files
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor directories and files
+.vscode/
+.idea/
+
+# Environment
 .env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
-.env.*.local
 
+# Build
+build/
+dist/
 
-# editor & system files
-.vscode/
-*.code-workspace
-.DS_Store
-Thumbs.db
-
-# Claude-related or AI temp folders
-.claude/
-.claude_code/
-.temp/
-cache/
+# Lockfiles (per-package lockfiles are okay to commit, but ignore optional root lockfile)
+package-lock.json

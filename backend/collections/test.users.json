@@ -1,0 +1,146 @@
+[{
+  "_id": {
+    "$oid": "682647d346e6a00ebb46b92e"
+  },
+  "fullName": "raff",
+  "email": "raf1@gmail.com",
+  "password": "$2b$10$UYtV8IeCBLkrme8992kUjuqDh5Ejh7mAqotKANOR6ksskQbXUbCcu",
+  "age": 18,
+  "role": "Learner",
+  "guardianEmail": null,
+  "status": "active",
+  "createdAt": {
+    "$date": "2025-05-15T20:00:19.133Z"
+  },
+  "updatedAt": {
+    "$date": "2025-05-15T20:00:19.133Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "6826492146e6a00ebb46b932"
+  },
+  "fullName": "raff",
+  "email": "rafiaa@gmail.com",
+  "password": "$2b$10$njZTaxxw4ablPeV8TD9Y6.47ipOlrvkfzgzT8/PcIybpyEOzMZz4a",
+  "age": 20,
+  "role": "Learner",
+  "guardianEmail": null,
+  "status": "active",
+  "createdAt": {
+    "$date": "2025-05-15T20:05:53.430Z"
+  },
+  "updatedAt": {
+    "$date": "2025-05-15T20:05:53.430Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "6826cd0cfdb366b035ea0d53"
+  },
+  "fullName": "Rafia",
+  "email": "rafia1@gmail.com",
+  "password": "$2b$10$uLedB2u8Ezxrmp2b70vM6Oj41SEpkGkLO9dqz.dHHdriBIscT0IRO",
+  "age": 20,
+  "role": "Learner",
+  "guardianEmail": null,
+  "status": "active",
+  "createdAt": {
+    "$date": "2025-05-16T05:28:44.843Z"
+  },
+  "updatedAt": {
+    "$date": "2025-05-16T05:28:44.843Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "68f5d72877d8f848e5e0a055"
+  },
+  "tracks": [
+    {
+      "_id": "track_beginner",
+      "trackId": "TRACK-001",
+      "name": "Beginner Track",
+      "level": 1,
+      "title": "Foundation & Awareness",
+      "description": "Build foundational knowledge about deepfakes, their impact, and basic awareness",
+      "icon": "📊",
+      "prerequisites": [],
+      "estimatedDuration": "8-10 hours",
+      "moduleCount": 3,
+      "status": "active",
+      "order": 1,
+      "completionCriteria": {
+        "minimumScore": 75,
+        "requiredModules": [
+          "module_1.1",
+          "module_1.2",
+          "module_1.3"
+        ],
+        "assessmentRequired": true
+      },
+      "createdAt": "2025-01-15T00:00:00Z",
+      "updatedAt": "2025-01-15T00:00:00Z"
+    },
+    {
+      "_id": "track_intermediate",
+      "trackId": "TRACK-002",
+      "name": "Intermediate Track",
+      "level": 2,
+      "title": "Detection & Analysis",
+      "description": "Learn detection techniques, verification tools, and hands-on analysis methods",
+      "icon": "🔍",
+      "prerequisites": [
+        "track_beginner"
+      ],
+      "estimatedDuration": "12-15 hours",
+      "moduleCount": 3,
+      "status": "active",
+      "order": 2,
+      "completionCriteria": {
+        "minimumScore": 80,
+        "requiredModules": [
+          "module_2.1",
+          "module_2.2",
+          "module_2.3"
+        ],
+        "assessmentRequired": true,
+        "practicalRequired": true
+      },
+      "createdAt": "2025-01-15T00:00:00Z",
+      "updatedAt": "2025-01-15T00:00:00Z"
+    },
+    {
+      "_id": "track_advanced",
+      "trackId": "TRACK-003",
+      "name": "Advanced Track",
+      "level": 3,
+      "title": "Expertise & Prevention",
+      "description": "Master advanced detection technologies, prevention strategies, and become an advocate",
+      "icon": "🚀",
+      "prerequisites": [
+        "track_intermediate"
+      ],
+      "estimatedDuration": "15-20 hours",
+      "moduleCount": 4,
+      "status": "active",
+      "order": 3,
+      "completionCriteria": {
+        "minimumScore": 85,
+        "requiredModules": [
+          "module_3.1",
+          "module_3.2",
+          "module_3.3",
+          "module_3.4"
+        ],
+        "assessmentRequired": true,
+        "capstoneRequired": true
+      },
+      "createdAt": "2025-01-15T00:00:00Z",
+      "updatedAt": "2025-01-15T00:00:00Z"
+    }
+  ]
+}]

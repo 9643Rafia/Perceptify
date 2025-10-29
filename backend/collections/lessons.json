@@ -1,0 +1,711 @@
+{
+  "lessons": [
+    {
+      "_id": "lesson_1.1.1",
+      "lessonId": "LES-1.1.1",
+      "moduleId": "module_1.1",
+      "name": "What Are Deepfakes?",
+      "description": "Introduction to deepfakes, their history, and fundamental concepts",
+      "order": 1,
+      "estimatedDuration": 15,
+      "durationType": "minutes",
+      "status": "active",
+      "contentItems": [
+        "content_1.1.1_video",
+        "content_1.1.1_timeline",
+        "content_1.1.1_reading",
+        "content_1.1.1_quiz"
+      ],
+      "learningOutcomes": [
+        "Define deepfakes and synthetic media",
+        "Trace the history of deepfakes from 2017 to 2025",
+        "Understand key terminology"
+      ],
+      "prerequisites": [],
+      "createdAt": "2025-01-15T00:00:00Z",
+      "updatedAt": "2025-01-15T00:00:00Z"
+    },
+    {
+      "_id": "lesson_1.1.2",
+      "lessonId": "LES-1.1.2",
+      "moduleId": "module_1.1",
+      "name": "Technologies Behind Deepfakes",
+      "description": "Learn about AI, machine learning, and GANs that power deepfake creation",
+      "order": 2,
+      "estimatedDuration": 20,
+      "durationType": "minutes",
+      "status": "active",
+      "contentItems": [
+        "content_1.1.2_video",
+        "content_1.1.2_diagram",
+        "content_1.1.2_case_study",
+        "content_1.1.2_quiz"
+      ],
+      "learningOutcomes": [
+        "Explain basic AI and machine learning concepts",
+        "Understand how GANs (Generative Adversarial Networks) work",
+        "Identify face swap technology mechanisms"
+      ],
+      "prerequisites": ["lesson_1.1.1"],
+      "createdAt": "2025-01-15T00:00:00Z",
+      "updatedAt": "2025-01-15T00:00:00Z"
+    },
+    {
+      "_id": "lesson_1.1.3",
+      "lessonId": "LES-1.1.3",
+      "moduleId": "module_1.1",
+      "name": "Types of Deepfakes",
+      "description": "Explore different categories of deepfakes including face swap, voice clone, and lip-sync",
+      "order": 3,
+      "estimatedDuration": 18,
+      "durationType": "minutes",
+      "status": "active",
+      "contentItems": [
+        "content_1.1.3_video",
+        "content_1.1.3_gallery",
+        "content_1.1.3_activity",
+        "content_1.1.3_quiz"
+      ],
+      "learningOutcomes": [
+        "Classify different types of deepfakes",
+        "Distinguish between face swap, voice clone, and lip-sync technologies",
+        "Recognize real vs fake examples"
+      ],
+      "prerequisites": ["lesson_1.1.2"],
+      "createdAt": "2025-01-15T00:00:00Z",
+      "updatedAt": "2025-01-15T00:00:00Z"
+    },
+    {
+      "_id": "lesson_1.2.1",
+      "lessonId": "LES-1.2.1",
+      "moduleId": "module_1.2",
+      "name": "Misinformation & Disinformation",
+      "description": "Understand how deepfakes spread false information and their psychological impact",
+      "order": 1,
+      "estimatedDuration": 20,
+      "durationType": "minutes",
+      "status": "active",
+      "contentItems": [
+        "content_1.2.1_video",
+        "content_1.2.1_case_study",
+        "content_1.2.1_reading",
+        "content_1.2.1_activity"
+      ],
+      "learningOutcomes": [
+        "Differentiate between misinformation and disinformation",
+        "Analyze how fake news spreads",
+        "Understand psychological impacts of deepfakes"
+      ],
+      "prerequisites": ["module_1.1"],
+      "createdAt": "2025-01-15T00:00:00Z",
+      "updatedAt": "2025-01-15T00:00:00Z"
+    },
+    {
+      "_id": "lesson_1.2.2",
+      "lessonId": "LES-1.2.2",
+      "moduleId": "module_1.2",
+      "name": "Social & Ethical Implications",
+      "description": "Examine the trust crisis and ethical dilemmas created by deepfake technology",
+      "order": 2,
+      "estimatedDuration": 25,
+      "durationType": "minutes",
+      "status": "active",
+      "contentItems": [
+        "content_1.2.2_video",
+        "content_1.2.2_scenario",
+        "content_1.2.2_forum",
+        "content_1.2.2_quiz"
+      ],
+      "learningOutcomes": [
+        "Evaluate ethical implications of deepfakes",
+        "Analyze trust issues in the digital age",
+        "Debate regulatory approaches to deepfakes"
+      ],
+      "prerequisites": ["lesson_1.2.1"],
+      "createdAt": "2025-01-15T00:00:00Z",
+      "updatedAt": "2025-01-15T00:00:00Z"
+    },
+    {
+      "_id": "lesson_1.2.3",
+      "lessonId": "LES-1.2.3",
+      "moduleId": "module_1.2",
+      "name": "Real-World Cases",
+      "description": "Study actual deepfake incidents and their consequences",
+      "order": 3,
+      "estimatedDuration": 22,
+      "durationType": "minutes",
+      "status": "active",
+      "contentItems": [
+        "content_1.2.3_case_study_1",
+        "content_1.2.3_case_study_2",
+        "content_1.2.3_case_study_3",
+        "content_1.2.3_activity",
+        "content_1.2.3_quiz"
+      ],
+      "learningOutcomes": [
+        "Analyze celebrity deepfake scandals",
+        "Understand corporate fraud via voice cloning",
+        "Examine deepfakes in journalism"
+      ],
+      "prerequisites": ["lesson_1.2.2"],
+      "createdAt": "2025-01-15T00:00:00Z",
+      "updatedAt": "2025-01-15T00:00:00Z"
+    },
+    {
+      "_id": "lesson_1.3.1",
+      "lessonId": "LES-1.3.1",
+      "moduleId": "module_1.3",
+      "name": "Laws Against Deepfakes",
+      "description": "Overview of global legislation and regulations targeting deepfakes",
+      "order": 1,
+      "estimatedDuration": 18,
+      "durationType": "minutes",
+      "status": "active",
+      "contentItems": [
+        "content_1.3.1_video",
+        "content_1.3.1_map",
+        "content_1.3.1_reading",
+        "content_1.3.1_quiz"
+      ],
+      "learningOutcomes": [
+        "Identify major legislation against deepfakes globally",
+        "Understand GDPR, privacy laws, and copyright issues",
+        "Compare country-wise regulations"
+      ],
+      "prerequisites": ["module_1.2"],
+      "createdAt": "2025-01-15T00:00:00Z",
+      "updatedAt": "2025-01-15T00:00:00Z"
+    },
+    {
+      "_id": "lesson_1.3.2",
+      "lessonId": "LES-1.3.2",
+      "moduleId": "module_1.3",
+      "name": "Rights & Responsibilities",
+      "description": "Learn about digital rights, consent, and legal responsibilities",
+      "order": 2,
+      "estimatedDuration": 15,
+      "durationType": "minutes",
+      "status": "active",
+      "contentItems": [
+        "content_1.3.2_video",
+        "content_1.3.2_scenario",
+        "content_1.3.2_checklist",
+        "content_1.3.2_quiz"
+      ],
+      "learningOutcomes": [
+        "Understand your digital rights",
+        "Distinguish legal from illegal deepfake uses",
+        "Apply consent and permission principles"
+      ],
+      "prerequisites": ["lesson_1.3.1"],
+      "createdAt": "2025-01-15T00:00:00Z",
+      "updatedAt": "2025-01-15T00:00:00Z"
+    },
+    {
+      "_id": "lesson_2.1.1",
+      "lessonId": "LES-2.1.1",
+      "moduleId": "module_2.1",
+      "name": "Visual Artifacts & Inconsistencies",
+      "description": "Learn to identify visual clues that reveal deepfakes",
+      "order": 1,
+      "estimatedDuration": 25,
+      "durationType": "minutes",
+      "status": "active",
+      "contentItems": [
+        "content_2.1.1_video",
+        "content_2.1.1_tutorial",
+        "content_2.1.1_practice",
+        "content_2.1.1_quiz"
+      ],
+      "learningOutcomes": [
+        "Detect unnatural blinking patterns",
+        "Identify lighting and shadow mismatches",
+        "Spot skin texture anomalies and facial boundary artifacts",
+        "Analyze facial features systematically"
+      ],
+      "prerequisites": ["track_beginner"],
+      "createdAt": "2025-01-15T00:00:00Z",
+      "updatedAt": "2025-01-15T00:00:00Z"
+    },
+    {
+      "_id": "lesson_2.1.2",
+      "lessonId": "LES-2.1.2",
+      "moduleId": "module_2.1",
+      "name": "Audio Analysis Techniques",
+      "description": "Master techniques for detecting voice clones and synthetic audio",
+      "order": 2,
+      "estimatedDuration": 20,
+      "durationType": "minutes",
+      "status": "active",
+      "contentItems": [
+        "content_2.1.2_video",
+        "content_2.1.2_audio_samples",
+        "content_2.1.2_tool",
+        "content_2.1.2_activity",
+        "content_2.1.2_quiz"
+      ],
+      "learningOutcomes": [
+        "Distinguish real from synthetic voices",
+        "Analyze audio waveforms",
+        "Identify voice clone artifacts",
+        "Use audio analysis tools"
+      ],
+      "prerequisites": ["lesson_2.1.1"],
+      "createdAt": "2025-01-15T00:00:00Z",
+      "updatedAt": "2025-01-15T00:00:00Z"
+    },
+    {
+      "_id": "lesson_2.1.3",
+      "lessonId": "LES-2.1.3",
+      "moduleId": "module_2.1",
+      "name": "Context & Metadata Analysis",
+      "description": "Learn to verify content beyond visual and audio elements",
+      "order": 3,
+      "estimatedDuration": 18,
+      "durationType": "minutes",
+      "status": "active",
+      "contentItems": [
+        "content_2.1.3_video",
+        "content_2.1.3_tutorial",
+        "content_2.1.3_activity",
+        "content_2.1.3_checklist",
+        "content_2.1.3_quiz"
+      ],
+      "learningOutcomes": [
+        "Examine video metadata",
+        "Investigate EXIF data",
+        "Apply context verification techniques",
+        "Use systematic verification checklists"
+      ],
+      "prerequisites": ["lesson_2.1.2"],
+      "createdAt": "2025-01-15T00:00:00Z",
+      "updatedAt": "2025-01-15T00:00:00Z"
+    },
+    {
+      "_id": "lesson_2.2.1",
+      "lessonId": "LES-2.2.1",
+      "moduleId": "module_2.2",
+      "name": "Digital Forensics Tools",
+      "description": "Learn to use professional forensic tools for deepfake detection",
+      "order": 1,
+      "estimatedDuration": 30,
+      "durationType": "minutes",
+      "status": "active",
+      "contentItems": [
+        "content_2.2.1_video",
+        "content_2.2.1_demo_1",
+        "content_2.2.1_demo_2",
+        "content_2.2.1_demo_3",
+        "content_2.2.1_lab",
+        "content_2.2.1_quiz"
+      ],
+      "learningOutcomes": [
+        "Use Google Reverse Image Search effectively",
+        "Operate InVID/WeVerify browser extension",
+        "Perform ELA analysis with FotoForensics",
+        "Verify suspicious videos with multiple tools"
+      ],
+      "prerequisites": ["module_2.1"],
+      "createdAt": "2025-01-15T00:00:00Z",
+      "updatedAt": "2025-01-15T00:00:00Z"
+    },
+    {
+      "_id": "lesson_2.2.2",
+      "lessonId": "LES-2.2.2",
+      "moduleId": "module_2.2",
+      "name": "AI-Assisted Detection",
+      "description": "Utilize AI-powered platforms for automated deepfake detection",
+      "order": 2,
+      "estimatedDuration": 25,
+      "durationType": "minutes",
+      "status": "active",
+      "contentItems": [
+        "content_2.2.2_video",
+        "content_2.2.2_demo_1",
+        "content_2.2.2_demo_2",
+        "content_2.2.2_activity",
+        "content_2.2.2_quiz"
+      ],
+      "learningOutcomes": [
+        "Understand machine learning for detection",
+        "Use Deepware Scanner",
+        "Operate Sensity AI Detection platform",
+        "Evaluate and compare tool accuracy"
+      ],
+      "prerequisites": ["lesson_2.2.1"],
+      "createdAt": "2025-01-15T00:00:00Z",
+      "updatedAt": "2025-01-15T00:00:00Z"
+    },
+    {
+      "_id": "lesson_2.2.3",
+      "lessonId": "LES-2.2.3",
+      "moduleId": "module_2.2",
+      "name": "Fact-Checking Methodologies",
+      "description": "Apply professional fact-checking frameworks and methods",
+      "order": 3,
+      "estimatedDuration": 20,
+      "durationType": "minutes",
+      "status": "active",
+      "contentItems": [
+        "content_2.2.3_video",
+        "content_2.2.3_framework",
+        "content_2.2.3_case_study",
+        "content_2.2.3_practice",
+        "content_2.2.3_quiz"
+      ],
+      "learningOutcomes": [
+        "Apply the SIFT method (Stop, Investigate, Find, Trace)",
+        "Follow professional fact-checking processes",
+        "Debunk viral deepfakes systematically",
+        "Document fact-checking findings"
+      ],
+      "prerequisites": ["lesson_2.2.2"],
+      "createdAt": "2025-01-15T00:00:00Z",
+      "updatedAt": "2025-01-15T00:00:00Z"
+    },
+    {
+      "_id": "lesson_2.3.1",
+      "lessonId": "LES-2.3.1",
+      "moduleId": "module_2.3",
+      "name": "Visual Detection Challenge",
+      "description": "Hands-on practice analyzing various types of video deepfakes",
+      "order": 1,
+      "estimatedDuration": 40,
+      "durationType": "minutes",
+      "status": "active",
+      "contentItems": [
+        "content_2.3.1_challenge_1",
+        "content_2.3.1_challenge_2",
+        "content_2.3.1_challenge_3",
+        "content_2.3.1_feedback"
+      ],
+      "learningOutcomes": [
+        "Analyze face-swap videos accurately",
+        "Identify lip-sync deepfakes",
+        "Spot partial face manipulation",
+        "Improve detection speed and reasoning"
+      ],
+      "prerequisites": ["module_2.2"],
+      "isLab": true,
+      "createdAt": "2025-01-15T00:00:00Z",
+      "updatedAt": "2025-01-15T00:00:00Z"
+    },
+    {
+      "_id": "lesson_2.3.2",
+      "lessonId": "LES-2.3.2",
+      "moduleId": "module_2.3",
+      "name": "Audio Detection Challenge",
+      "description": "Practice identifying voice clones using spectrogram analysis",
+      "order": 2,
+      "estimatedDuration": 30,
+      "durationType": "minutes",
+      "status": "active",
+      "contentItems": [
+        "content_2.3.2_challenge",
+        "content_2.3.2_tool",
+        "content_2.3.2_report"
+      ],
+      "learningOutcomes": [
+        "Identify voice clones with high accuracy",
+        "Use spectrogram analysis effectively",
+        "Improve audio detection skills",
+        "Interpret detection metrics"
+      ],
+      "prerequisites": ["lesson_2.3.1"],
+      "isLab": true,
+      "createdAt": "2025-01-15T00:00:00Z",
+      "updatedAt": "2025-01-15T00:00:00Z"
+    },
+    {
+      "_id": "lesson_2.3.3",
+      "lessonId": "LES-2.3.3",
+      "moduleId": "module_2.3",
+      "name": "Multi-Modal Analysis",
+      "description": "Complex scenario requiring comprehensive analysis of video, audio, context, and source",
+      "order": 3,
+      "estimatedDuration": 45,
+      "durationType": "minutes",
+      "status": "active",
+      "contentItems": [
+        "content_2.3.3_scenario",
+        "content_2.3.3_analysis",
+        "content_2.3.3_report",
+        "content_2.3.3_peer_review"
+      ],
+      "learningOutcomes": [
+        "Conduct comprehensive multi-modal analysis",
+        "Write professional verification reports",
+        "Provide constructive peer feedback",
+        "Synthesize multiple detection techniques"
+      ],
+      "prerequisites": ["lesson_2.3.2"],
+      "isLab": true,
+      "createdAt": "2025-01-15T00:00:00Z",
+      "updatedAt": "2025-01-15T00:00:00Z"
+    },
+    {
+      "_id": "lesson_3.1.1",
+      "lessonId": "LES-3.1.1",
+      "moduleId": "module_3.1",
+      "name": "Deep Learning for Detection",
+      "description": "Explore neural network architectures and CNN-based detection methods",
+      "order": 1,
+      "estimatedDuration": 35,
+      "durationType": "minutes",
+      "status": "active",
+      "contentItems": [
+        "content_3.1.1_video",
+        "content_3.1.1_paper",
+        "content_3.1.1_demo",
+        "content_3.1.1_notebook",
+        "content_3.1.1_quiz"
+      ],
+      "learningOutcomes": [
+        "Understand neural network architectures for detection",
+        "Analyze CNN-based detection methods",
+        "Run pre-trained detection models",
+        "Implement detection algorithms"
+      ],
+      "prerequisites": ["track_intermediate"],
+      "createdAt": "2025-01-15T00:00:00Z",
+      "updatedAt": "2025-01-15T00:00:00Z"
+    },
+    {
+      "_id": "lesson_3.1.2",
+      "lessonId": "LES-3.1.2",
+      "moduleId": "module_3.1",
+      "name": "Blockchain for Media Authentication",
+      "description": "Learn about content provenance and authentication using blockchain",
+      "order": 2,
+      "estimatedDuration": 30,
+      "durationType": "minutes",
+      "status": "active",
+      "contentItems": [
+        "content_3.1.2_video",
+        "content_3.1.2_demo",
+        "content_3.1.2_case_study",
+        "content_3.1.2_discussion",
+        "content_3.1.2_quiz"
+      ],
+      "learningOutcomes": [
+        "Understand C2PA standard for content provenance",
+        "Explore digital watermarking techniques",
+        "Evaluate Adobe Content Credentials",
+        "Envision future of media verification"
+      ],
+      "prerequisites": ["lesson_3.1.1"],
+      "createdAt": "2025-01-15T00:00:00Z",
+      "updatedAt": "2025-01-15T00:00:00Z"
+    },
+    {
+      "_id": "lesson_3.1.3",
+      "lessonId": "LES-3.1.3",
+      "moduleId": "module_3.1",
+      "name": "Adversarial Techniques",
+      "description": "Study the arms race between deepfake creation and detection",
+      "order": 3,
+      "estimatedDuration": 28,
+      "durationType": "minutes",
+      "status": "active",
+      "contentItems": [
+        "content_3.1.3_video",
+        "content_3.1.3_reading",
+        "content_3.1.3_analysis",
+        "content_3.1.3_quiz"
+      ],
+      "learningOutcomes": [
+        "Understand adversarial attack techniques",
+        "Analyze latest research in detection",
+        "Evaluate limitations of current tools",
+        "Predict future developments"
+      ],
+      "prerequisites": ["lesson_3.1.2"],
+      "createdAt": "2025-01-15T00:00:00Z",
+      "updatedAt": "2025-01-15T00:00:00Z"
+    },
+    {
+      "_id": "lesson_3.2.1",
+      "lessonId": "LES-3.2.1",
+      "moduleId": "module_3.2",
+      "name": "Personal Data Protection",
+      "description": "Protect your digital identity from deepfake exploitation",
+      "order": 1,
+      "estimatedDuration": 25,
+      "durationType": "minutes",
+      "status": "active",
+      "contentItems": [
+        "content_3.2.1_video",
+        "content_3.2.1_checklist",
+        "content_3.2.1_tool",
+        "content_3.2.1_quiz"
+      ],
+      "learningOutcomes": [
+        "Implement privacy best practices",
+        "Configure social media security settings",
+        "Protect biometric data",
+        "Conduct personal privacy audits"
+      ],
+      "prerequisites": ["module_3.1"],
+      "createdAt": "2025-01-15T00:00:00Z",
+      "updatedAt": "2025-01-15T00:00:00Z"
+    },
+    {
+      "_id": "lesson_3.2.2",
+      "lessonId": "LES-3.2.2",
+      "moduleId": "module_3.2",
+      "name": "Organizational Defense",
+      "description": "Design enterprise-level deepfake defense strategies",
+      "order": 2,
+      "estimatedDuration": 30,
+      "durationType": "minutes",
+      "status": "active",
+      "contentItems": [
+        "content_3.2.2_video",
+        "content_3.2.2_framework",
+        "content_3.2.2_case_study",
+        "content_3.2.2_template",
+        "content_3.2.2_quiz"
+      ],
+      "learningOutcomes": [
+        "Develop corporate anti-deepfake policies",
+        "Create risk assessment matrices",
+        "Implement enterprise security measures",
+        "Design deepfake response plans"
+      ],
+      "prerequisites": ["lesson_3.2.1"],
+      "createdAt": "2025-01-15T00:00:00Z",
+      "updatedAt": "2025-01-15T00:00:00Z"
+    },
+    {
+      "_id": "lesson_3.2.3",
+      "lessonId": "LES-3.2.3",
+      "moduleId": "module_3.2",
+      "name": "Crisis Management",
+      "description": "Handle deepfake attacks with effective crisis response",
+      "order": 3,
+      "estimatedDuration": 28,
+      "durationType": "minutes",
+      "status": "active",
+      "contentItems": [
+        "content_3.2.3_video",
+        "content_3.2.3_playbook",
+        "content_3.2.3_simulation",
+        "content_3.2.3_resources",
+        "content_3.2.3_quiz"
+      ],
+      "learningOutcomes": [
+        "Execute incident response protocols",
+        "Manage PR crises from deepfakes",
+        "Coordinate legal and technical support",
+        "Document crisis response actions"
+      ],
+      "prerequisites": ["lesson_3.2.2"],
+      "createdAt": "2025-01-15T00:00:00Z",
+      "updatedAt": "2025-01-15T00:00:00Z"
+    },
+    {
+      "_id": "lesson_3.3.1",
+      "lessonId": "LES-3.3.1",
+      "moduleId": "module_3.3",
+      "name": "Media Literacy Advocacy",
+      "description": "Become a champion for digital media literacy",
+      "order": 1,
+      "estimatedDuration": 30,
+      "durationType": "minutes",
+      "status": "active",
+      "contentItems": [
+        "content_3.3.1_video",
+        "content_3.3.1_guide",
+        "content_3.3.1_resources",
+        "content_3.3.1_project",
+        "content_3.3.1_quiz"
+      ],
+      "learningOutcomes": [
+        "Develop advocacy skills",
+        "Teach others about deepfakes effectively",
+        "Create educational materials",
+        "Design awareness campaigns"
+      ],
+      "prerequisites": ["module_3.2"],
+      "createdAt": "2025-01-15T00:00:00Z",
+      "updatedAt": "2025-01-15T00:00:00Z"
+    },
+    {
+      "_id": "lesson_3.3.2",
+      "lessonId": "LES-3.3.2",
+      "moduleId": "module_3.3",
+      "name": "Reporting & Intervention",
+      "description": "Navigate reporting channels and intervention procedures",
+      "order": 2,
+      "estimatedDuration": 25,
+      "durationType": "minutes",
+      "status": "active",
+      "contentItems": [
+        "content_3.3.2_video",
+        "content_3.3.2_directory",
+        "content_3.3.2_template",
+        "content_3.3.2_quiz"
+      ],
+      "learningOutcomes": [
+        "Report deepfakes to appropriate platforms",
+        "Document incidents properly",
+        "Navigate fact-checking organizations",
+        "Coordinate with law enforcement"
+      ],
+      "prerequisites": ["lesson_3.3.1"],
+      "createdAt": "2025-01-15T00:00:00Z",
+      "updatedAt": "2025-01-15T00:00:00Z"
+    },
+    {
+      "_id": "lesson_3.3.3",
+      "lessonId": "LES-3.3.3",
+      "moduleId": "module_3.3",
+      "name": "Building Resilient Communities",
+      "description": "Create and support community defense networks",
+      "order": 3,
+      "estimatedDuration": 28,
+      "durationType": "minutes",
+      "status": "active",
+      "contentItems": [
+        "content_3.3.3_video",
+        "content_3.3.3_case_study",
+        "content_3.3.3_action_plan",
+        "content_3.3.3_forum",
+        "content_3.3.3_quiz"
+      ],
+      "learningOutcomes": [
+        "Design collective defense strategies",
+        "Start community initiatives",
+        "Build local support networks",
+        "Share best practices"
+      ],
+      "prerequisites": ["lesson_3.3.2"],
+      "createdAt": "2025-01-15T00:00:00Z",
+      "updatedAt": "2025-01-15T00:00:00Z"
+    },
+    {
+      "_id": "lesson_3.4.1",
+      "lessonId": "LES-3.4.1",
+      "moduleId": "module_3.4",
+      "name": "Capstone Kickoff Workshop",
+      "description": "Define your capstone scope, assemble verification tools, and draft milestone plans.",
+      "order": 1,
+      "estimatedDuration": 35,
+      "durationType": "minutes",
+      "status": "active",
+      "contentItems": [
+        "content_3.4.1_briefing",
+        "content_3.4.1_planner",
+        "content_3.4.1_lab"
+      ],
+      "learningOutcomes": [
+        "Articulate the objective and scope of your capstone investigation",
+        "Assemble the analytical toolkit and evidence collection workflow",
+        "Schedule milestones and success criteria for the project delivery"
+      ],
+      "prerequisites": ["lesson_3.3.3"],
+      "createdAt": "2025-01-15T00:00:00Z",
+      "updatedAt": "2025-01-15T00:00:00Z"
+    }
+  ]
+}

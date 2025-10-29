@@ -1,70 +1,67 @@
-# Getting Started with Create React App
+# Perceptify — Server Setup
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+This README focuses on the backend/server setup for local development. It lists the expected `.env` variables, explains how the server loads environment variables, and shows the available scripts for running the server with `node` or `nodemon` (auto-restart).
 
-## Available Scripts
+If you need the full project-level developer guide (frontend + backend), that is available in the project root README; this file is intentionally server-focused.
 
-In the project directory, you can run:
+## Prerequisites
 
-### `npm start`
+- Node.js (v16+ recommended)
+- npm
+- (optional) MongoDB (Atlas or local). The project reads `MONGO_URI` from `.env`. If you don't have Mongo available you can run a local Mongo or later enable an in-memory server for development.
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+## Where to put your .env
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+Place a single `.env` file at the project root (same level as `package.json` and the `server/` folder). The server code reads environment variables via `dotenv` when the server starts.
 
-### `npm test`
+Important: do NOT commit your `.env`.
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+## Expected .env variables (server)
 
-### `npm run build`
+Below are the keys the backend expects. Provide values appropriate for your environment. Example values are placeholder-only.
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+```
+REACT_APP_API_URL=http://localhost:5000/api   # used by frontend
+BROWSER=none
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+# Email (optional - for notifications/guardian approvals)
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_USER=your-email@gmail.com
+EMAIL_PASS=your-email-app-password
+EMAIL_FROM=your-email@gmail.com
+EMAIL_SECURE=false
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+<!-- MONGO_URI=mongodb+srv://<user>:<pass>@cluster0.mongodb.net/perceptify?retryWrites=true&w=majority -->
+MONGO_URI=mongodb://127.0.0.1:27017/perceptify (This is for development)
+JWT_SECRET=your_jwt_secret
+PORT=5000
+NODE_ENV=development
+FRONTEND_URL=http://localhost:3000
+```
 
-### `npm run eject`
+Notes:
+- `MONGO_URI` is required for database functionality. If you run a local MongoDB, use something like `mongodb://127.0.0.1:27017/perceptify`.
+- `JWT_SECRET` is used to sign tokens. Keep it secret.
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+//Write How to start the project
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+## From project base directory
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+**Frontend:**
 
-## Learn More
+cd ./frontend && npm run start
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+**Backend:**
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+cd ./backend && npm run dev (for development)
 
-### Code Splitting
+cd ./backend && npm run start (for production)
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+GOALS:
+Make sure we have videos being properly provided from the backend
+Make sure the lesson is marked as complete we get a toaster notification + next Make next module unlock
+Make next track unlock
+Be able to make post on community
+All lessons have some content
