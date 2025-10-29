@@ -18,6 +18,7 @@ import LabInterface from './screens/LabInterface';
 import CertificateView from './screens/CertificateView';
 import AdminDashboard from './screens/AdminDashboard';
 import ForumPage from './screens/ForumPage';
+import TimelineDeepfakes from './screens/TimelineDeepfakes';
 import './assets/styles/bootstrap.custom.css';
 import './assets/styles/index.css';
 import App from './App';
@@ -56,8 +57,7 @@ const router = createBrowserRouter(
       {/* Community Forum Route */}
       <Route path='forum' element={<ProtectedRoute><ForumPage /></ProtectedRoute>} />
 
-      {/* Admin Routes */}
-      <Route path='admin/dashboard' element={<AdminProtectedRoute><AdminDashboard /></AdminProtectedRoute>} />
+      <Route path='interactive/timeline-deepfakes' element={<TimelineDeepfakes />} />
     </Route>
   )
 

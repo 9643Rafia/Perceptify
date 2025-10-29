@@ -6,6 +6,7 @@ import LearningAPI from '../services/learning.api';
 import LessonProgressAPI from '../services/lessonProgress.service';
 import ProgressAPI from '../services/progress.api';
 import resolveMediaUrl from '../utils/media';
+import InteractiveContent from '../components/InteractiveContent';
 
 const API_BASE = process.env.REACT_APP_API_BASE || 'http://localhost:5000/api';
 
@@ -495,20 +496,9 @@ const LessonPlayer = () => {
         );
 
       case 'interactive': {
-        const frameUrl = resolveMediaUrl(currentContent.url);
         return (
           <div className="lms-content-box">
-            <h3>{currentContent.title}</h3>
-            <p>{currentContent.description}</p>
-            {frameUrl && (
-              <iframe
-                src={frameUrl}
-                width="100%"
-                height="600px"
-                frameBorder="0"
-                title={currentContent.title}
-              />
-            )}
+            <InteractiveContent content={currentContent} />
           </div>
         );
       }
