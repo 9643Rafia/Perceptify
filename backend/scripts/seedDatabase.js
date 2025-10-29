@@ -260,7 +260,7 @@ const createSampleLabs = async () => {
         challengeId: `${module.moduleId}_ch1`,
         title: 'Video Analysis Challenge',
         description: 'Analyze a video and determine if it is a deepfake',
-        mediaUrl: '/media/labs/sample-video-1.mp4',
+        mediaUrl: '/media/labs/videos/political-speech.mp4',
         mediaType: 'video',
         isDeepfake: true,
         points: 50,
