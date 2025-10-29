@@ -5,6 +5,7 @@ import { FaArrowLeft, FaArrowRight, FaCheck } from 'react-icons/fa';
 import LearningAPI from '../services/learning.api';
 import LessonProgressAPI from '../services/lessonProgress.service';
 import ProgressAPI from '../services/progress.api';
+import resolveMediaUrl from '../utils/media';
 
 const API_BASE = process.env.REACT_APP_API_BASE || 'http://localhost:5000/api';
 
@@ -406,18 +407,18 @@ const LessonPlayer = () => {
     const currentContent = content[currentContentIndex];
     // moved logging to a useEffect to avoid logging on every timer tick
     switch (currentContent.type) {
-      case 'video':
-        console.log('🎬 LessonPlayer: Rendering video with URL:', currentContent.url);
+      case 'video': {
+        const resolvedVideoUrl = resolveMediaUrl(currentContent.url);
+        console.log('🎬 LessonPlayer: Rendering video with URL:', currentContent.url, '=>', resolvedVideoUrl);
         return (
           <div className="lms-video-wrapper">
-            <div className="mb-2 small text-muted">Source: {videoFallbackUrl || currentContent.url}</div>
             <video
               className="lms-video-player"
               controls
               preload="metadata"
               crossOrigin="anonymous"
               ref={videoRef}
-              src={videoFallbackUrl || currentContent.url}
+              src={videoFallbackUrl || resolvedVideoUrl}
               onLoadStart={() => console.log('🎬 Video: Load start')}
               onLoadedData={() => console.log('🎬 Video: Loaded data')}
               onCanPlay={() => console.log('🎬 Video: Can play')}
@@ -427,12 +428,11 @@ const LessonPlayer = () => {
               onError={async (e) => {
                 console.error('❌ Video Error event:', e);
                 console.error('❌ Video Error details:', e.target?.error);
-                // Try a one-time fallback: fetch the file and create a blob URL
-                if (!videoFallbackAttempted && currentContent.url) {
+                if (!videoFallbackAttempted && resolvedVideoUrl) {
                   setVideoFallbackAttempted(true);
                   try {
-                    console.log('🎬 Video: attempting fallback fetch for', currentContent.url);
-                    const resp = await fetch(currentContent.url, { method: 'GET' });
+                    console.log('🎬 Video: attempting fallback fetch for', resolvedVideoUrl);
+                    const resp = await fetch(resolvedVideoUrl, { method: 'GET' });
                     if (!resp.ok) {
                       console.error('🎬 Video fallback fetch failed status:', resp.status);
                       return;
@@ -440,7 +440,6 @@ const LessonPlayer = () => {
                     const blob = await resp.blob();
                     const blobUrl = URL.createObjectURL(blob);
                     setVideoFallbackUrl(blobUrl);
-                    // load the blob into the player
                     if (videoRef.current) {
                       videoRef.current.src = blobUrl;
                       videoRef.current.load();
@@ -456,23 +455,36 @@ const LessonPlayer = () => {
               Your browser does not support the video tag.
             </video>
             <div className="mt-2">
-              <button className="btn btn-sm btn-outline-secondary me-2" onClick={async () => {
-                // clear fallback and attempt reload
-                if (videoFallbackUrl) {
-                  try { URL.revokeObjectURL(videoFallbackUrl); } catch (e) { }
-                  setVideoFallbackUrl(null);
-                }
-                setVideoFallbackAttempted(false);
-                if (videoRef.current) {
-                  try { videoRef.current.pause(); } catch (e) { }
-                  videoRef.current.src = currentContent.url;
-                  videoRef.current.load();
-                  try { await videoRef.current.play(); } catch (e) { console.log('Retry play failed', e.message); }
-                }
-              }}>Retry</button>
+              <button
+                className="btn btn-sm btn-outline-secondary me-2"
+                onClick={async () => {
+                  if (videoFallbackUrl) {
+                    try { URL.revokeObjectURL(videoFallbackUrl); } catch (e) { }
+                    setVideoFallbackUrl(null);
+                  }
+                  setVideoFallbackAttempted(false);
+                  if (videoRef.current) {
+                    try { videoRef.current.pause(); } catch (e) { }
+                    videoRef.current.src = resolvedVideoUrl;
+                    videoRef.current.load();
+                    try { await videoRef.current.play(); } catch (e) { console.log('Retry play failed', e.message); }
+                  }
+                }}
+              >
+                Reload Video
+              </button>
+              <a
+                className="btn btn-sm btn-outline-primary"
+                href={resolvedVideoUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Download Video
+              </a>
             </div>
           </div>
         );
+      }
 
       case 'reading':
         return (
@@ -482,14 +494,15 @@ const LessonPlayer = () => {
           </div>
         );
 
-      case 'interactive':
+      case 'interactive': {
+        const frameUrl = resolveMediaUrl(currentContent.url);
         return (
           <div className="lms-content-box">
             <h3>{currentContent.title}</h3>
             <p>{currentContent.description}</p>
-            {currentContent.url && (
+            {frameUrl && (
               <iframe
-                src={currentContent.url}
+                src={frameUrl}
                 width="100%"
                 height="600px"
                 frameBorder="0"
@@ -498,6 +511,7 @@ const LessonPlayer = () => {
             )}
           </div>
         );
+      }
 
       case 'quiz':
         console.log('🎯 QUIZ RENDER: Rendering quiz content', {

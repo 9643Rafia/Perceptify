@@ -89,6 +89,21 @@ const QuizInterface = () => {
 
   
 
+  useEffect(() => {
+    if (results?.trackId) {
+      setRelatedTrackId(results.trackId);
+    }
+  }, [results]);
+
+  useEffect(() => {
+    if (showResults && results?.trackCompleted) {
+      const timeout = setTimeout(() => {
+        navigate('/dashboard', { replace: true });
+      }, 2000);
+      return () => clearTimeout(timeout);
+    }
+  }, [showResults, results, navigate]);
+
   const handleAnswerSelect = (questionId, answer) => {
     const question = quiz.questions.find(q => q.questionId === questionId);
 
@@ -142,8 +157,11 @@ const QuizInterface = () => {
         markedForReview: markedForReview.has(q.questionId)
       }));
 
-      const startTime = quiz.timeLimit ? quiz.timeLimit * 60 - timeRemaining : 0;
-  const result = await QuizzesAPI.submitQuiz(quizId, formattedAnswers, startTime);
+      const timeSpentSeconds =
+        quiz.timeLimit && typeof timeRemaining === 'number'
+          ? Math.max(0, quiz.timeLimit * 60 - timeRemaining)
+          : null;
+      const result = await QuizzesAPI.submitQuiz(quizId, formattedAnswers, timeSpentSeconds);
 
       // If this is a mini-quiz from a lesson, mark the content as complete
       if (lessonId && contentId && result.passed) {
@@ -314,15 +332,19 @@ const QuizInterface = () => {
   };
 
   const renderResults = () => {
-    const courseTrackId =
+    const baseTrackId =
       relatedTrackId ||
       moduleInfo?.trackId ||
       quiz?.trackId ||
       quiz?.module?.trackId ||
       null;
+    const resolvedTrackId = results?.trackId || baseTrackId;
+    const isTrackCompleted = !!results?.trackCompleted;
     const handleReturnToCourse = () => {
-      if (courseTrackId) {
-        navigate(`/course/${courseTrackId}`, { replace: true });
+      if (isTrackCompleted) {
+        navigate('/dashboard', { replace: true });
+      } else if (resolvedTrackId) {
+        navigate(`/course/${resolvedTrackId}`, { replace: true });
       } else {
         navigate(-1);
       }
@@ -433,8 +455,13 @@ const QuizInterface = () => {
         </div>
 
         <div className="mt-4">
+          {isTrackCompleted && (
+            <Alert variant="success" className="mb-3">
+              Track completed! Redirecting you to your learning dashboard...
+            </Alert>
+          )}
           <Button variant="primary" onClick={handleReturnToCourse} className="me-2">
-            Back to Course
+            Back to {isTrackCompleted ? 'Dashboard' : 'Course'}
           </Button>
           {results.attemptsRemaining > 0 && !results.passed && (
             <Button variant="outline-primary" onClick={() => window.location.reload()}>

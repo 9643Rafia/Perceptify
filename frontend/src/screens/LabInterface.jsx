@@ -3,6 +3,7 @@ import { Container, Row, Col, Card, Button, Form, Alert, Badge, ProgressBar } fr
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { FaCheck, FaTimes } from 'react-icons/fa';
 import QuizzesAPI from '../services/quizzes.api';
+import resolveMediaUrl from '../utils/media';
 import LearningAPI from '../services/learning.api';
 
 const LabInterface = () => {
@@ -64,6 +65,21 @@ const LabInterface = () => {
     return () => { mounted = false; };
   }, [labId]);
 
+  useEffect(() => {
+    if (results?.trackId) {
+      setRelatedTrackId(results.trackId);
+    }
+  }, [results]);
+
+  useEffect(() => {
+    if (showResults && results?.trackCompleted) {
+      const timeout = setTimeout(() => {
+        navigate('/dashboard', { replace: true });
+      }, 2000);
+      return () => clearTimeout(timeout);
+    }
+  }, [showResults, results, navigate]);
+
   const handleVerdictChange = (challengeId, verdict) => {
     setResponses(responses.map(r =>
       r.challengeId === challengeId ? { ...r, verdict } : r
@@ -87,7 +103,7 @@ const LabInterface = () => {
 
     try {
       setSubmitting(true);
-  const result = await QuizzesAPI.submitLab(labId, responses);
+      const result = await QuizzesAPI.submitLab(labId, responses);
       setResults(result);
       setShowResults(true);
     } catch (err) {
@@ -100,6 +116,7 @@ const LabInterface = () => {
   const renderChallenge = () => {
     const challenge = lab.challenges[currentChallenge];
     const response = responses.find(r => r.challengeId === challenge.challengeId);
+    const challengeMediaUrl = resolveMediaUrl(challenge.mediaUrl);
 
     return (
       <Card className="lms-lab-box">
@@ -119,19 +136,19 @@ const LabInterface = () => {
             {challenge.mediaType === 'video' ? (
               <video
                 controls
-                src={challenge.mediaUrl}
+                src={challengeMediaUrl}
                 style={{ maxWidth: '100%', maxHeight: '600px' }}
               >
                 Your browser does not support the video tag.
               </video>
             ) : challenge.mediaType === 'image' ? (
               <img
-                src={challenge.mediaUrl}
+                src={challengeMediaUrl}
                 alt={challenge.title}
                 style={{ maxWidth: '100%', maxHeight: '600px', objectFit: 'contain' }}
               />
             ) : challenge.mediaType === 'audio' ? (
-              <audio controls src={challenge.mediaUrl} className="w-100">
+              <audio controls src={challengeMediaUrl} className="w-100">
                 Your browser does not support the audio tag.
               </audio>
             ) : null}
@@ -176,14 +193,18 @@ const LabInterface = () => {
   };
 
   const renderResults = () => {
-    const courseTrackId =
+    const baseTrackId =
       relatedTrackId ||
       moduleInfo?.trackId ||
       lab?.trackId ||
       null;
+    const resolvedTrackId = results?.trackId || baseTrackId;
+    const isTrackCompleted = !!results?.trackCompleted;
     const handleReturnToCourse = () => {
-      if (courseTrackId) {
-        navigate(`/course/${courseTrackId}`, { replace: true });
+      if (isTrackCompleted) {
+        navigate('/dashboard', { replace: true });
+      } else if (resolvedTrackId) {
+        navigate(`/course/${resolvedTrackId}`, { replace: true });
       } else {
         navigate(-1);
       }
@@ -278,8 +299,13 @@ const LabInterface = () => {
         </div>
 
         <div className="mt-4">
+          {isTrackCompleted && (
+            <Alert variant="success" className="mb-3">
+              Track completed! Redirecting you to your learning dashboard...
+            </Alert>
+          )}
           <Button variant="primary" onClick={handleReturnToCourse} className="me-2">
-            Back to Course
+            Back to {isTrackCompleted ? 'Dashboard' : 'Course'}
           </Button>
           {results.attemptsRemaining > 0 && !results.passed && (
             <Button variant="outline-primary" onClick={() => window.location.reload()}>
